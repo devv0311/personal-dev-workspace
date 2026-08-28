@@ -1,0 +1,36 @@
+# OS
+.DS_Store
+Thumbs.db
+
+# Editor / IDE
+.vscode/
+.idea/
+*.swp
+*~
+
+# Environment / secrets
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+secrets/
+
+# Logs
+*.log
+logs/
+
+# Claude Code local session state
+.remember/
+.claude/
+
+# Dependency / build artifacts (stack not yet chosen)
+node_modules/
+dist/
+build/
+.cache/
+coverage/
+__pycache__/
+*.py[cod]
+.venv/
+venv/
