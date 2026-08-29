@@ -5,6 +5,8 @@
 //   GET  /api/projects
 //   GET  /api/projects/:id
 //   POST /api/projects/:id/notes      { title?, body? }
+//   GET  /api/graph                   context graph read model (P3.2)
+//   GET  /api/objects/:id             one object + its edges (Context Inspector)
 //   static:  /  ->  adapters/web/*
 
 import { createServer, type IncomingMessage, type ServerResponse } from 'node:http';
@@ -16,6 +18,7 @@ import { buildContainer, type Container } from './container.ts';
 import { principalFromRequest } from './auth.ts';
 import { captureNote } from '../../application/capture-note.ts';
 import { viewProject, listProjects } from '../../application/view-project.ts';
+import { buildContextGraph, inspectObject } from '../../application/context-graph.ts';
 import { DomainError } from '../../domain/errors.ts';
 
 const webDir = join(dirname(fileURLToPath(import.meta.url)), '../web');
@@ -101,6 +104,20 @@ export function createApp(container: Container = buildContainer()) {
             workspaceId: scope.workspaceId,
             sharedProjectIds: scope.sharedProjectIds,
           });
+        }
+
+        if (method === 'GET' && path === '/api/graph') {
+          // Server-side authorization: the graph is assembled from the same
+          // scope-filtered repositories as every other read. Client-side
+          // filtering is a view concern only — never the security boundary.
+          const graph = await buildContextGraph(container, scope);
+          return send(res, 200, graph);
+        }
+
+        const objMatch = /^\/api\/objects\/([0-9a-fA-F-]+)$/.exec(path);
+        if (method === 'GET' && objMatch) {
+          const inspection = await inspectObject(container, scope, objMatch[1]!);
+          return send(res, 200, inspection);
         }
 
         if (method === 'GET' && path === '/api/projects') {
