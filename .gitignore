@@ -24,7 +24,10 @@ logs/
 .remember/
 .claude/
 
-# Dependency / build artifacts (stack not yet chosen)
+# Tooling scratch
+.playwright-mcp/
+
+# Dependency / build artifacts
 node_modules/
 dist/
 build/

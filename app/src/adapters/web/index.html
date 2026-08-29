@@ -1,0 +1,81 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Personal Developer Workspace</title>
+    <link rel="stylesheet" href="/styles.css" />
+  </head>
+  <body>
+    <a class="skip-link" href="#main">Skip to content</a>
+    <header class="app-bar">
+      <div class="brand">
+        <span class="brand-mark" aria-hidden="true">◆</span>
+        <span>Personal Developer Workspace</span>
+      </div>
+      <div class="who">
+        <label for="principal">Acting as</label>
+        <select id="principal" aria-label="Development principal">
+          <option value="">Loading…</option>
+        </select>
+        <span class="dev-flag" title="Development-only authentication boundary">dev auth</span>
+      </div>
+    </header>
+
+    <div class="layout">
+      <nav class="sidebar" aria-label="Projects">
+        <h2>Projects</h2>
+        <ul id="project-list" class="project-list">
+          <li class="muted">Loading…</li>
+        </ul>
+      </nav>
+
+      <main id="main" class="content">
+        <section id="project-view" hidden>
+          <div class="project-head">
+            <h1 id="project-title"></h1>
+            <p class="project-meta">
+              <span id="project-owner"></span>
+              <span aria-hidden="true">·</span>
+              <span id="capture-count"></span>
+            </p>
+            <p class="tagline">This project remembers what you captured.</p>
+          </div>
+
+          <form id="capture-form" class="capture" autocomplete="off">
+            <h2>Capture a note</h2>
+            <label for="note-title">Title <span class="opt">(optional if body is set)</span></label>
+            <input id="note-title" name="title" type="text" maxlength="200"
+                   placeholder="e.g. Chose token-bucket over sliding-window" />
+            <label for="note-body">Body</label>
+            <textarea id="note-body" name="body" rows="3"
+                      placeholder="What did you decide, and why?"></textarea>
+            <div class="capture-actions">
+              <button type="submit" id="capture-submit">Capture into project</button>
+              <span id="capture-status" role="status" aria-live="polite"></span>
+            </div>
+          </form>
+
+          <section aria-labelledby="context-h">
+            <h2 id="context-h">Captured context</h2>
+            <div id="context-empty" class="empty" hidden>
+              Nothing captured yet. Add the first note above — it will persist and
+              reappear after a restart.
+            </div>
+            <ol id="context-list" class="context-list"></ol>
+          </section>
+        </section>
+
+        <section id="placeholder" class="empty large">
+          <p>Select a project to view and capture its context.</p>
+        </section>
+
+        <section id="error-view" class="error" hidden role="alert">
+          <p id="error-message"></p>
+        </section>
+      </main>
+    </div>
+
+    <script type="module" src="/app.js"></script>
+  </body>
+</html>
