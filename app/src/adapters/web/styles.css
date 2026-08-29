@@ -537,6 +537,9 @@ body::before {
 .next-list .tm { color: var(--ink-faint); font-family: var(--font-mono); font-size: 9.5px; margin-left: auto; }
 
 .pulse-name { font: 600 10px/1 var(--font-ui); letter-spacing: 0.1em; text-transform: uppercase; color: var(--ink); margin-bottom: var(--s2); }
+/* P3.3: linked to a real project — same identity the graph/inspector show */
+.pulse-name.linked { cursor: pointer; }
+.pulse-name.linked:hover, .pulse-name.linked:focus-visible { color: var(--action); }
 .pulse-metrics { display: grid; grid-template-columns: repeat(3, 1fr); gap: var(--s3); }
 .pm .n { font: 300 22px/1 var(--font-mono); color: var(--ink); }
 .pm .n.real { color: var(--action); }
@@ -544,6 +547,9 @@ body::before {
 .actgrid { display: grid; grid-template-columns: repeat(10, 1fr); gap: 4px; margin-top: var(--s3); }
 .actgrid i { aspect-ratio: 1; border-radius: 50%; background: var(--hair); }
 .actgrid i.on { background: var(--memory); }
+/* P3.3: an "on" dot is a real captured object — click/Enter opens it in the graph */
+.actgrid i.on { cursor: pointer; transition: background 100ms, box-shadow 100ms; }
+.actgrid i.on:hover, .actgrid i.on:focus-visible { background: var(--action); box-shadow: 0 0 0 2px rgba(255,122,26,0.25); outline: none; }
 
 /* =============================================================================
    RIGHT RAIL widgets
