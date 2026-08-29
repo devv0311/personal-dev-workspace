@@ -1,0 +1,26 @@
+{
+  "name": "personal-dev-workspace",
+  "version": "0.0.1",
+  "private": true,
+  "description": "First implementation slice (P2.7): Capture → Persist → Associate → Display",
+  "type": "module",
+  "engines": {
+    "node": ">=22.6"
+  },
+  "scripts": {
+    "migrate": "node src/adapters/persistence/migrate.ts",
+    "seed": "node src/seed.ts",
+    "dev:core": "node src/adapters/http/server.ts",
+    "dev:worker": "node src/worker/index.ts",
+    "typecheck": "tsc --noEmit",
+    "test": "NODE_ENV=test node --test --test-concurrency=1 'test/**/*.test.ts'"
+  },
+  "dependencies": {
+    "pg": "^8.13.1"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.2",
+    "@types/pg": "^8.11.10",
+    "typescript": "^5.7.2"
+  }
+}

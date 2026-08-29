@@ -1,0 +1,28 @@
+// Composition root. Wires PostgreSQL adapters to the ports the use cases need.
+
+import { db } from '../persistence/db.ts';
+import { makeScopeResolver } from '../persistence/scope.pg.ts';
+import { makeObjectRepository } from '../persistence/object-repository.pg.ts';
+import { makeRelationshipRepository } from '../persistence/relationship-repository.pg.ts';
+import {
+  activityWriter,
+  auditWriter,
+  outboxWriter,
+} from '../persistence/writers.pg.ts';
+
+export function buildContainer(uow = db) {
+  const objects = makeObjectRepository(uow);
+  const relationships = makeRelationshipRepository(uow);
+  const scopeResolver = makeScopeResolver(uow);
+  return {
+    uow,
+    objects,
+    relationships,
+    scopeResolver,
+    activity: activityWriter,
+    audit: auditWriter,
+    outbox: outboxWriter,
+  };
+}
+
+export type Container = ReturnType<typeof buildContainer>;
