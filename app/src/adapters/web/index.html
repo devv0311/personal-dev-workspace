@@ -159,7 +159,7 @@
       <main class="center" id="center">
         <div class="center-head">
           <span class="label">Context Field</span>
-          <span class="label" id="field-count">0 nodes</span>
+          <span class="label mono" id="field-count">0 nodes</span>
         </div>
 
         <div class="field-wrap">
@@ -167,14 +167,29 @@
             class="field-svg"
             id="field-svg"
             viewBox="0 0 1000 1000"
+            preserveAspectRatio="xMidYMid meet"
             role="img"
-            aria-label="Context field — orbital view of projects. Static shell; the interactive graph arrives in a later milestone."
+            aria-label="Context field — static orbital view: projects on the outer ring, captured context on the inner ring, accumulated context as the particle core. The interactive graph arrives in a later milestone."
           >
+            <g id="field-crosshair"></g>
             <g id="field-rings"></g>
+            <g id="field-edges"></g>
             <g id="field-core"></g>
             <g id="field-radials"></g>
+            <g id="field-labels"></g>
             <g id="field-nodes"></g>
           </svg>
+
+          <!-- HUD chrome — fills the rectangular centre without stretching the field -->
+          <div class="field-frame" aria-hidden="true"><i></i><i></i><i></i><i></i></div>
+          <div class="field-readout tl" aria-hidden="true">FIELD · STATIC</div>
+          <div class="field-readout br" aria-hidden="true"><span id="field-orbits">ORBIT ×3</span></div>
+          <ul class="field-legend" aria-label="Node types">
+            <li><span class="sw project"></span>Project</li>
+            <li><span class="sw ctx"></span>Context</li>
+            <li><span class="sw memory"></span>Memory core</li>
+          </ul>
+
           <div class="field-empty" id="field-empty" hidden>
             <span class="big">No context nodes</span>
             <span>Capture something into a project to populate the field.</span>

@@ -11,13 +11,13 @@ const KNOWN_PRINCIPALS = [
 const NS = 'http://www.w3.org/2000/svg';
 const CX = 500;
 const CY = 500;
-const R_OUTER = 432;
-const R_MID = 312;
-const R_CORE = 156;
+const R_OUTER = 436;
+const R_MID = 300;
+const R_CORE = 150;
 
 const state = {
   principalId: localStorage.getItem('dc.principalId') || KNOWN_PRINCIPALS[0].id,
-  projects: [],
+  projects: [], // each: WorkspaceObject + { captures: [{object, anchoredBy}] }
   selectedId: null,
 };
 
@@ -62,12 +62,49 @@ function el(name, attrs, parent) {
 }
 
 /* ---- central context field (static shell) --------------------------- */
-function buildRings() {
+function buildStatic() {
+  // crosshair axes — very low contrast, structural
+  const xh = $('field-crosshair');
+  xh.textContent = '';
+  el('line', { class: 'crosshair', x1: CX, y1: 40, x2: CX, y2: 960 }, xh);
+  el('line', { class: 'crosshair', x1: 40, y1: CY, x2: 960, y2: CY }, xh);
+
+  // layered rings
   const g = $('field-rings');
   g.textContent = '';
   el('circle', { class: 'ring spin primary', cx: CX, cy: CY, r: R_OUTER }, g);
-  el('circle', { class: 'ring', cx: CX, cy: CY, r: R_MID }, g);
+  el('circle', { class: 'ring mid', cx: CX, cy: CY, r: R_MID }, g);
   el('circle', { class: 'ring', cx: CX, cy: CY, r: R_CORE }, g);
+  // ring ticks at cardinal points
+  for (const ring of [R_OUTER, R_MID, R_CORE]) {
+    for (let a = 0; a < 4; a++) {
+      const ang = (a * Math.PI) / 2;
+      el('line', {
+        class: 'ring-tick',
+        x1: (CX + Math.cos(ang) * (ring - 4)).toFixed(1),
+        y1: (CY + Math.sin(ang) * (ring - 4)).toFixed(1),
+        x2: (CX + Math.cos(ang) * (ring + 4)).toFixed(1),
+        y2: (CY + Math.sin(ang) * (ring + 4)).toFixed(1),
+      }, g);
+    }
+  }
+
+  // semantic layer labels, left side, clear of node positions
+  const labels = $('field-labels');
+  labels.textContent = '';
+  const put = (r, text) => {
+    const t = el('text', {
+      class: 'ring-label',
+      x: (CX - r - 6).toFixed(1),
+      y: CY,
+      'text-anchor': 'end',
+      'dominant-baseline': 'central',
+    }, labels);
+    t.textContent = text;
+  };
+  put(R_OUTER, 'Projects');
+  put(R_MID, 'Context');
+  put(R_CORE, 'Memory');
 }
 
 function buildCore() {
@@ -111,42 +148,72 @@ function buildCore() {
   }
 }
 
-function nodePoint(index, total) {
-  const ang = -Math.PI / 2 + (index / Math.max(total, 1)) * Math.PI * 2;
-  return { x: CX + Math.cos(ang) * R_OUTER, y: CY + Math.sin(ang) * R_OUTER, ang };
+function atAngle(radius, ang) {
+  return { x: CX + Math.cos(ang) * radius, y: CY + Math.sin(ang) * radius };
 }
 
 function renderField() {
   const nodesG = $('field-nodes');
   const radialsG = $('field-radials');
+  const edgesG = $('field-edges');
   nodesG.textContent = '';
   radialsG.textContent = '';
+  edgesG.textContent = '';
 
-  const total = state.projects.length;
-  $('field-count').textContent = `${total} node${total === 1 ? '' : 's'}`;
-  $('field-empty').hidden = total > 0;
+  const projects = state.projects;
+  const nProj = projects.length;
+  const contextCount = projects.reduce((n, p) => n + (p.captures?.length || 0), 0);
+  $('field-count').textContent = `${nProj + contextCount} node${nProj + contextCount === 1 ? '' : 's'}`;
+  $('field-orbits').textContent = `${nProj} PROJ · ${contextCount} CTX`;
+  $('field-empty').hidden = nProj > 0;
 
-  state.projects.forEach((p, i) => {
-    const { x, y } = nodePoint(i, total);
+  projects.forEach((p, i) => {
+    // outer ring: project node. Start at top, spread evenly.
+    const pAng = -Math.PI / 2 + (i / Math.max(nProj, 1)) * Math.PI * 2;
+    const pp = atAngle(R_OUTER, pAng);
     const selected = p.id === state.selectedId;
 
-    el(
-      'line',
-      { class: `radial${selected ? ' hot' : ''}`, x1: CX, y1: CY, x2: x, y2: y },
-      radialsG,
-    );
+    el('line', {
+      class: `radial${selected ? ' hot' : ''}`,
+      x1: CX, y1: CY, x2: pp.x.toFixed(1), y2: pp.y.toFixed(1),
+    }, radialsG);
 
+    // inner ring: this project's captured context, as a short arc "owned" by it
+    const caps = p.captures || [];
+    const spread = Math.min(0.5, 0.13 * Math.max(caps.length - 1, 0)); // radians
+    caps.forEach((c, j) => {
+      const frac = caps.length === 1 ? 0.5 : j / (caps.length - 1);
+      const cAng = pAng + (frac - 0.5) * 2 * spread;
+      const cp = atAngle(R_MID, cAng);
+
+      el('line', {
+        class: `edge-line${selected ? ' hot' : ''}`,
+        x1: pp.x.toFixed(1), y1: pp.y.toFixed(1),
+        x2: cp.x.toFixed(1), y2: cp.y.toFixed(1),
+      }, edgesG);
+
+      const cg = el('g', {
+        class: `node ctx${selected ? ' lit' : ' dim'}`,
+        transform: `translate(${cp.x.toFixed(1)} ${cp.y.toFixed(1)})`,
+        'aria-hidden': 'true',
+      }, nodesG);
+      el('circle', { class: 'disc', r: 9 }, cg);
+      const cglyph = el('text', { class: 'glyph', y: 0.5 }, cg);
+      cglyph.textContent = (c.object.title || 'n').slice(0, 1).toUpperCase();
+    });
+
+    // the project node last, so it sits above its edges
     const g = el('g', {
-      class: `node${selected ? ' selected' : ''}`,
+      class: `node project${selected ? ' selected' : ''}`,
       tabindex: '0',
       role: 'button',
-      'aria-label': `Project ${p.title}`,
-      transform: `translate(${x.toFixed(1)} ${y.toFixed(1)})`,
+      'aria-label': `Project ${p.title}, ${caps.length} captured context ${caps.length === 1 ? 'item' : 'items'}`,
+      transform: `translate(${pp.x.toFixed(1)} ${pp.y.toFixed(1)})`,
     }, nodesG);
-    el('circle', { class: 'disc', r: 25 }, g);
+    el('circle', { class: 'disc', r: 24 }, g);
     const glyph = el('text', { class: 'glyph', y: 1 }, g);
     glyph.textContent = p.title.slice(0, 2).toUpperCase();
-    const cap = el('text', { class: 'cap', y: 44 }, g);
+    const cap = el('text', { class: 'cap', y: 43 }, g);
     cap.textContent = p.title.length > 24 ? p.title.slice(0, 23) + '…' : p.title;
 
     const activate = () => selectProject(p.id);
@@ -178,6 +245,12 @@ async function selectProject(id) {
   renderField();
   try {
     const view = await api(`/api/projects/${id}`);
+    // keep the in-memory model current so the field reflects new captures
+    const p = state.projects.find((x) => x.id === id);
+    if (p) {
+      p.captures = view.captures;
+      renderField();
+    }
     $('inspector-empty').hidden = true;
     $('inspector-body').hidden = false;
     $('insp-title').textContent = view.project.title;
@@ -242,7 +315,18 @@ async function loadProjects() {
   }
   try {
     const { projects } = await api('/api/projects');
-    state.projects = projects;
+    // hydrate each project with its captured context so the field is layered
+    // (small: seed data is a handful of projects). Failures degrade to no context.
+    state.projects = await Promise.all(
+      projects.map(async (p) => {
+        try {
+          const view = await api(`/api/projects/${p.id}`);
+          return { ...p, captures: view.captures };
+        } catch {
+          return { ...p, captures: [] };
+        }
+      }),
+    );
     if (state.selectedId && !projects.some((p) => p.id === state.selectedId)) {
       state.selectedId = null;
       $('inspector-empty').hidden = false;
@@ -381,7 +465,7 @@ function startClock() {
   setInterval(tick, 30_000);
 }
 
-buildRings();
+buildStatic();
 buildCore();
 renderActivityGrid(0);
 wirePrincipalPicker();

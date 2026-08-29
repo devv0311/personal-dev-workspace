@@ -95,16 +95,28 @@ src/worker/        outbox drain + fts-maintenance consumer.
 - Near-black canvas, thin structural borders, semantic accent system
   (orange action · cyan apps · purple memory · amber routines · red blocker),
   three-level glow, technical/HUD typography, uppercase tracked labels.
-- Three-column composition — left rail 24% (Micro Tools, Developer Activity,
-  Project Pulse) · centre 52% (Context Field + Context Inspector) · right rail
-  24% (Attention, Skills Deck, Routines).
-- Central **Context Field** is a **static SVG** — orbital rings, a static
-  particle core with a few network links, and one node per real project.
-  No graph engine, no Three.js, no physics (those are a later milestone).
-  Selecting a node loads that project's real captured context and enables
-  the real capture form.
-- Responsive: desktop command centre → laptop rails become overlay drawers
-  (☰ in the header, Esc closes) → mobile sequential stack.
+- Three-column composition — left rail (Micro Tools, Developer Activity,
+  Project Pulse) · centre (Context Field + Context Inspector) · right rail
+  (Attention, Skills Deck, Routines). Rails are a true **24%** through the
+  primary desktop range (`--rail-w: clamp(272px, 24%, 420px)`); on genuine
+  ultrawide the cap lets the centre grow into an immersive command centre
+  (Design blueprint §7).
+- Central **Context Field** is a **static SVG**, deliberately the dominant
+  surface: layered orbital rings + cardinal ticks, a crosshair, semantic
+  layer labels (`PROJECTS / CONTEXT / MEMORY`), a static particle core with a
+  few network links, HUD corner brackets + readouts + a node-type legend.
+  **Real data:** one node per project on the outer ring, one node per that
+  project's captured context on the inner ring, with `belongs_to`
+  relationship lines between them. Selecting a project node loads its real
+  captured context, lights its edges, and enables the real capture form; a
+  new capture appears in the field immediately.
+  **No graph engine, no Three.js, no physics** (a later milestone).
+- The **Context Inspector** is a secondary detail surface — short
+  (`clamp(176px, 26vh, 300px)`), quieter, below the field.
+- Responsive: desktop command centre → ≤1180px rails become Esc-dismissable
+  overlay drawers (☰ in the header) → ≤720px sequential stack (field +
+  capture → attention → tools/pulse); verified free of horizontal overflow
+  at 2048 / 1600 / 1100 / 390.
 
 **P3.1 decisions (small, documented):**
 - Fonts loaded from Google Fonts (Inter + JetBrains Mono) with full system
@@ -114,7 +126,11 @@ src/worker/        outbox drain + fts-maintenance consumer.
 - Preview widgets (Developer Activity timeline, Project Pulse task counts,
   Attention, Skills Deck, Routines) use representative developer content and
   carry a `PREVIEW` tag; offline tools show `OFFLINE`. Real values: the clock,
-  the selected project name, and the capture count / activity dots.
+  the selected project name, the capture count / activity dots, and every
+  Context Field node.
+- On load the field hydrates by fetching each visible project's
+  `/api/projects/:id` (a handful of calls for seed data) so context nodes are
+  real, not representative.
 - Mobile section order: field + capture → Attention rail → tools/pulse rail.
 
 ## Deferred (documented, not built here)
