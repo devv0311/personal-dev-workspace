@@ -89,39 +89,43 @@ src/worker/        outbox drain + fts-maintenance consumer.
 
 ## Visual shell (P3.1 — static)
 
-`src/adapters/web/` is the dark HUD **developer command center** described in
-`Design_Dashboard_Aesthetic_Claude_Blueprint.md` (the authoritative visual spec):
+`src/adapters/web/` is the dark HUD **developer command center**. It is
+calibrated to the supplied **RUBRIC reference screenshots** (the primary visual
+authority), then `Design_Dashboard_Aesthetic_Claude_Blueprint.md`:
 
-- Near-black canvas, thin structural borders, semantic accent system
-  (orange action · cyan apps · purple memory · amber routines · red blocker),
-  three-level glow, technical/HUD typography, uppercase tracked labels.
-- Three-column composition — left rail (Micro Tools, Developer Activity,
-  Project Pulse) · centre (Context Field + Context Inspector) · right rail
-  (Attention, Skills Deck, Routines). Rails are a true **24%** through the
-  primary desktop range (`--rail-w: clamp(272px, 24%, 420px)`); on genuine
-  ultrawide the cap lets the centre grow into an immersive command centre
-  (Design blueprint §7).
-- Central **Context Field** is a **static SVG**, deliberately the dominant
-  surface: layered orbital rings + cardinal ticks, a crosshair, semantic
-  layer labels (`PROJECTS / CONTEXT / MEMORY`), a static particle core with a
-  few network links, HUD corner brackets + readouts + a node-type legend.
-  **Real data:** one node per project on the outer ring, one node per that
-  project's captured context on the inner ring, with `belongs_to`
-  relationship lines between them. Selecting a project node loads its real
-  captured context, lights its edges, and enables the real capture form; a
-  new capture appears in the field immediately.
+- **Pure-black canvas.** A 1px orange hairline runs across the very top edge.
+  Semantic accents used sparingly: orange = action / active, cyan = apps /
+  external, purple = memory / context, amber = routines, red = blocker.
+- **Borderless rails.** Following the reference, the rails are NOT boxed
+  panels — they are typographic sections on pure black, divided by hairline
+  rules. Only the Skills Deck items are real cards. Big orange metric numbers;
+  very small tightly-tracked uppercase labels; monospace for times / ids /
+  status.
+- **Compact centred header:** a small orange product mark + `AGENTIC CONTEXT
+  OS` subtitle + a row of tiny icon controls; thin orange-outline pill
+  buttons (`GRAPH`, `MENU`) at the edges; the dev-auth principal switcher as
+  a pill.
+- **Central Context Field — a static SVG, the dominant surface.** Concentric
+  labelled orbital layers matching the reference: `APPLICATIONS` (cyan ring +
+  hex icon badges, representative / offline), `ROUTINES` (amber ring + nodes),
+  `MEMORY` (purple). A full-360° dense concentric **dot-field** fills the
+  memory annulus; an orange `CONTEXT.CORE` hexagon and a dense particle core
+  sit at the centre; a faint hex-grid texture backs it.
+  **Real data:** one small labelled node per project near the core, and each
+  project forms a bright **cluster wedge** in the memory field whose lit inner
+  rings track its real capture count. Selecting a project node slides up a
+  compact **Context Inspector** (detail on demand, ~40% height) with that
+  project's real captured context and the real capture form; a new capture
+  brightens its wedge immediately.
   **No graph engine, no Three.js, no physics** (a later milestone).
-- The **Context Inspector** is a secondary detail surface — short
-  (`clamp(176px, 26vh, 300px)`), quieter, below the field.
-- Responsive: desktop command centre → ≤1180px rails become Esc-dismissable
-  overlay drawers (☰ in the header) → ≤720px sequential stack (field +
-  capture → attention → tools/pulse); verified free of horizontal overflow
-  at 2048 / 1600 / 1100 / 390.
+- Responsive: desktop command centre → ≤1200px rails become Esc-dismissable
+  overlay drawers (☰ in the header) → ≤720px sequential stack. Verified free
+  of horizontal overflow at 2048 / 1600 / 1140 / 390.
 
 **P3.1 decisions (small, documented):**
 - Fonts loaded from Google Fonts (Inter + JetBrains Mono) with full system
   fallback stacks — degrades cleanly offline. Single `<link>`, no build step.
-- One ambient effect: a ~220s primary-ring rotation, disabled under
+- One ambient effect: a ~240s Applications-ring rotation, disabled under
   `prefers-reduced-motion`. No other continuous motion.
 - Preview widgets (Developer Activity timeline, Project Pulse task counts,
   Attention, Skills Deck, Routines) use representative developer content and
