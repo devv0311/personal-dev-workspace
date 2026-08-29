@@ -228,9 +228,20 @@ traverse, focus, and capture into a real project.
   three real relationship rows (one `private`). Bob seeing *exactly one* project
   is a stronger authorization demonstration than Bob seeing nothing.
 - On viewports ≤720px the graph frames the real content on first load instead of
-  the outer decorative orbits, and the graph surface uses `touch-action: none`
-  so one-finger pan and two-finger pinch work; the page scrolls from outside the
-  graph rect.
+  the outer decorative orbits, and touch uses a **two-mode model** so the graph
+  is never a dead-scroll region:
+  - *not engaged* (the fitted view you scroll past) — `touch-action: pan-y`, so a
+    vertical swipe scrolls the page normally. A horizontal-first drag belongs to
+    the graph, and once owned it pans in both axes; the axis is decided once,
+    past a 6px slop, from the press origin.
+  - *engaged* (zoomed past the fitted scale) — `touch-action: none`, so one
+    finger pans in 2D.
+  Pinch always belongs to the graph (`pan-y` grants the browser no pinch-zoom),
+  and pinching in is what engages; **Reset** returns to the page-scroll state.
+  Verified with real CDP touch events: vertical swipe scrolls the page and
+  leaves the transform untouched; horizontal swipe pans the graph and does not
+  scroll; pinch zooms and engages; a vertical swipe while engaged pans the graph
+  without scrolling; Reset disengages; tap still selects.
 - Selection emphasis, the focus transition and a two-beat search-match pulse are
   the only added motion; all are disabled under `prefers-reduced-motion`.
 

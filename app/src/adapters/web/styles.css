@@ -363,6 +363,7 @@ body::before {
 .gctl > header {
   display: flex; align-items: center; gap: var(--s2);
   padding: 6px 8px 6px 10px; border-bottom: 1px solid var(--hair-faint);
+  white-space: nowrap;
 }
 .gctl > header .ct { margin-left: auto; font-size: 8.5px; color: var(--ink-ghost); letter-spacing: 0.06em; }
 .gctl .gbody { padding: var(--s2) 10px 10px; display: flex; flex-direction: column; gap: 6px; }
@@ -612,7 +613,7 @@ table.routines { width: 100%; border-collapse: collapse; font-size: 10px; }
   body.drawer-right .rail.right { transform: translateX(0); }
   .rail-toggle { display: grid; }
   .brand .sub { display: none; }
-  .gctl { width: 212px; top: 26px; right: 12px; }
+  .gctl { width: 232px; top: 26px; right: 12px; }
 }
 
 @media (max-width: 720px) {
@@ -627,6 +628,10 @@ table.routines { width: 100%; border-collapse: collapse; font-size: 10px; }
   .center { order: 1; overflow: visible; }
   .field-wrap { position: static; height: auto; }
   .field-svg { position: static; width: 100%; height: 88vw; }
+  /* Not a dead-scroll region: a vertical swipe scrolls the page until the
+     reader zooms in, at which point the graph takes one-finger panning. */
+  .field-svg { touch-action: pan-y; }
+  .field-svg.engaged { touch-action: none; }
   .field-readout, .legend-pill, .node-tip { display: none; }
   /* Graph controls become an in-flow surface under the graph (blueprint §18). */
   .gctl {

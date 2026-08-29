@@ -93,6 +93,9 @@ export function createGraphView(opts) {
   const edgeEls = new Map(); // edge id -> line
   let anim = null;
   let framed = false;
+  // The scale at which the whole graph fits. Above it, the user has explicitly
+  // zoomed in — see the touch model note by the pointer handlers.
+  let fitK = 1;
 
   /* ------------------------------------------------------ coordinate space */
 
@@ -112,10 +115,14 @@ export function createGraphView(opts) {
     return { x: p.x, y: p.y };
   }
 
+  const isEngaged = () => state.transform.k > fitK * 1.02;
+
   function applyTransform() {
     const { k, tx, ty } = state.transform;
     viewport.setAttribute('transform', `translate(${tx.toFixed(2)} ${ty.toFixed(2)}) scale(${k.toFixed(4)})`);
     svg.style.setProperty('--zoom', k.toFixed(4));
+    // Drives touch-action on small screens only (see the CSS media query).
+    svg.classList.toggle('engaged', isEngaged());
     onState({ zoom: k });
   }
   function setTransform(t) {
@@ -406,7 +413,9 @@ export function createGraphView(opts) {
   function fitContent(ms = 420) {
     const pts = [...state.pos.values()];
     if (!pts.length) return;
-    animateTo(focusTransform(boundsOf(pts, 46), viewRect(), 3.2), ms);
+    const target = focusTransform(boundsOf(pts, 46), viewRect(), 3.2);
+    fitK = target.k;
+    animateTo(target, ms);
   }
 
   const rank = (n) => (n.kind === 'workspace' ? 0 : n.type === 'project' ? 2 : 1);
@@ -518,12 +527,29 @@ export function createGraphView(opts) {
   // The element under the press. setPointerCapture retargets the click that
   // follows to the <svg>, so the click handler cannot ask what was clicked.
   let pressedId = null;
+  // TOUCH MODEL (small screens). The graph must not be a dead-scroll region,
+  // but it must still pan with one finger. Two states, driven by whether the
+  // reader has zoomed past the fitted view:
+  //   • not engaged (the state you scroll past in) — touch-action: pan-y, so a
+  //     vertical swipe scrolls the page. A horizontal-first drag is ours, and
+  //     once owned it pans freely in both axes.
+  //   • engaged (zoomed in) — touch-action: none, so one finger pans in 2D.
+  // Pinch always belongs to the graph (pan-y grants the browser no pinch-zoom),
+  // and pinching in is what engages; Reset returns to the page-scroll state.
+  let gestureAxis = null; // null = undecided, 'x' = ours, 'y' = the page's
 
   svg.addEventListener('pointerdown', (ev) => {
     if (ev.button !== undefined && ev.button > 1) return;
     stopAnim();
-    pointers.set(ev.pointerId, { x: ev.clientX, y: ev.clientY, svg: toSvg(ev.clientX, ev.clientY) });
+    pointers.set(ev.pointerId, {
+      x: ev.clientX,
+      y: ev.clientY,
+      ox: ev.clientX,
+      oy: ev.clientY,
+      svg: toSvg(ev.clientX, ev.clientY),
+    });
     dragged = false;
+    gestureAxis = null;
     pressedId = ev.target.closest?.('[data-id]')?.getAttribute('data-id') ?? null;
     try {
       svg.setPointerCapture(ev.pointerId);
@@ -547,6 +573,7 @@ export function createGraphView(opts) {
       const prev = pointers.get(ev.pointerId);
 
       if (pointers.size === 2 && pinchStart) {
+        gestureAxis = 'x'; // a pinch is always the graph's
         pointers.set(ev.pointerId, { ...prev, x: ev.clientX, y: ev.clientY });
         const [a, b] = [...pointers.values()];
         const dist = Math.hypot(a.x - b.x, a.y - b.y) || 1;
@@ -556,12 +583,26 @@ export function createGraphView(opts) {
         return;
       }
 
+      // One finger, not engaged: decide once, past the slop, who owns the
+      // gesture. A vertical-first swipe is the page's — stay out of its way.
+      if (ev.pointerType === 'touch' && !isEngaged()) {
+        const gx = ev.clientX - prev.ox;
+        const gy = ev.clientY - prev.oy;
+        if (gestureAxis === null && Math.abs(gx) + Math.abs(gy) > 6) {
+          gestureAxis = Math.abs(gx) >= Math.abs(gy) ? 'x' : 'y';
+        }
+        if (gestureAxis !== 'x') {
+          pointers.set(ev.pointerId, { ...prev, x: ev.clientX, y: ev.clientY });
+          return;
+        }
+      }
+
       // Pan: the outer translate is in SVG user units, so the delta is exact.
       // Measured against the previous move, not the press, or it compounds.
       const now = toSvg(ev.clientX, ev.clientY);
       const dx = now.x - prev.svg.x;
       const dy = now.y - prev.svg.y;
-      pointers.set(ev.pointerId, { x: ev.clientX, y: ev.clientY, svg: now });
+      pointers.set(ev.pointerId, { ...prev, x: ev.clientX, y: ev.clientY, svg: now });
       if (Math.abs(dx) + Math.abs(dy) > 0.6) dragged = true;
       setTransform({ k: state.transform.k, tx: state.transform.tx + dx, ty: state.transform.ty + dy });
       hideTip();
@@ -663,8 +704,12 @@ export function createGraphView(opts) {
   }
 
   function resetView() {
-    if (window.innerWidth <= 720) fitContent();
-    else animateTo({ k: 1, tx: 0, ty: 0 });
+    if (window.innerWidth <= 720) {
+      fitContent();
+    } else {
+      fitK = 1;
+      animateTo({ k: 1, tx: 0, ty: 0 });
+    }
   }
 
   function zoomBy(factor) {
