@@ -24,6 +24,7 @@ import {
   relationshipSqlFragment,
   type ResolvedScope,
 } from '../../domain/visibility.ts';
+import { DEFAULT_GRAPH_LIMIT, clampLimit } from './object-repository.pg.ts';
 
 interface RelRow {
   id: string;
@@ -60,6 +61,34 @@ function rowToEdge(r: RelRow): RelationshipEdge {
 const REL_COLS =
   'r.id, r.workspace_id, r.from_object_id, r.to_object_id, r.verb, r.origin, r.confidence_state, r.author_id, r.visibility_scope, r.provenance_kind, r.provenance_detail, r.created_at';
 
+interface HomeRow {
+  object_id: string;
+  project_id: string;
+  workspace_id: string;
+  created_at: string;
+}
+
+/**
+ * The synthesised `belongs_to` edge derived from object.home_project_id
+ * (P2.6 §8.2). One builder, used by every read, so the two forms cannot drift.
+ */
+function homeRowToEdge(h: HomeRow): RelationshipEdge {
+  return {
+    id: null,
+    workspaceId: asWorkspaceId(h.workspace_id),
+    fromObjectId: asObjectId(h.object_id),
+    toObjectId: asObjectId(h.project_id),
+    verb: 'belongs_to',
+    origin: 'explicit',
+    confidenceState: 'known',
+    authorId: null,
+    visibilityScope: 'shared',
+    provenance: { kind: 'synthesised:home_project', detail: {} },
+    createdAt: new Date(h.created_at).toISOString(),
+    synthesised: true,
+  };
+}
+
 export function makeRelationshipRepository(uow: UnitOfWork): RelationshipRepository {
   return {
     async forObject(scope: ResolvedScope, objectId: ObjectId): Promise<RelationshipEdge[]> {
@@ -79,38 +108,58 @@ export function makeRelationshipRepository(uow: UnitOfWork): RelationshipReposit
 
       // --- synthesised belongs_to from home_project_id (P2.6 §8.2) ---
       // Only surfaced if BOTH the object and its home project are visible.
+      // Both directions: the object's own anchor, AND the anchors of objects
+      // whose home this object IS — otherwise "edges touching objectId" would
+      // under-report a Project's incident edges, and the Context Inspector
+      // would disagree with the graph about the same object (P3.2).
       const oVis = objectSqlFragment(scope, 'o', 2);
       const pVis = objectSqlFragment(scope, 'p', 2 + oVis.params.length);
-      const home = await uow.query<{
-        object_id: string;
-        project_id: string;
-        workspace_id: string;
-        created_at: string;
-      }>(
+      const home = await uow.query<HomeRow>(
         `SELECT o.id AS object_id, p.id AS project_id, o.workspace_id, o.created_at
            FROM object o
            JOIN object p ON p.id = o.home_project_id
-          WHERE o.id = $1 AND ${oVis.text} AND ${pVis.text}`,
-        [objectId, ...oVis.params, ...pVis.params],
+          WHERE (o.id = $1 OR o.home_project_id = $1)
+            AND ${oVis.text} AND ${pVis.text}
+          ORDER BY o.created_at ASC, o.id ASC
+          LIMIT $${2 + oVis.params.length + pVis.params.length}`,
+        [objectId, ...oVis.params, ...pVis.params, DEFAULT_GRAPH_LIMIT],
       );
-      const h = home.rows[0];
-      if (h) {
-        edges.push({
-          id: null,
-          workspaceId: asWorkspaceId(h.workspace_id),
-          fromObjectId: asObjectId(h.object_id),
-          toObjectId: asObjectId(h.project_id),
-          verb: 'belongs_to',
-          origin: 'explicit',
-          confidenceState: 'known',
-          authorId: null,
-          visibilityScope: 'shared',
-          provenance: { kind: 'synthesised:home_project', detail: {} },
-          createdAt: new Date(h.created_at).toISOString(),
-          synthesised: true,
-        });
-      }
+      for (const h of home.rows) edges.push(homeRowToEdge(h));
       return edges;
+    },
+
+    async listVisible(scope: ResolvedScope, limit = DEFAULT_GRAPH_LIMIT): Promise<RelationshipEdge[]> {
+      // Whole-workspace form of forObject(). Identical policy composition:
+      // real rows are filtered by relationshipSqlFragment (visible(from) ∧
+      // visible(to) ∧ edge rule); synthesised belongs_to edges are emitted only
+      // when BOTH the object and its home project pass the object rule.
+      const cap = clampLimit(limit);
+
+      const vis = relationshipSqlFragment(scope, 'r', 'ofrom', 'oto', 1);
+      const { rows } = await uow.query<RelRow>(
+        `SELECT ${REL_COLS}
+           FROM relationship r
+           JOIN object ofrom ON ofrom.id = r.from_object_id
+           JOIN object oto   ON oto.id = r.to_object_id
+          WHERE ${vis.text}
+          ORDER BY r.created_at ASC, r.id ASC
+          LIMIT $${vis.params.length + 1}`,
+        [...vis.params, cap],
+      );
+
+      const oVis = objectSqlFragment(scope, 'o', 1);
+      const pVis = objectSqlFragment(scope, 'p', 1 + oVis.params.length);
+      const home = await uow.query<HomeRow>(
+        `SELECT o.id AS object_id, p.id AS project_id, o.workspace_id, o.created_at
+           FROM object o
+           JOIN object p ON p.id = o.home_project_id
+          WHERE ${oVis.text} AND ${pVis.text}
+          ORDER BY o.created_at ASC, o.id ASC
+          LIMIT $${oVis.params.length + pVis.params.length + 1}`,
+        [...oVis.params, ...pVis.params, cap],
+      );
+
+      return [...rows.map(rowToEdge), ...home.rows.map(homeRowToEdge)];
     },
 
     async create(tx: Tx, edge): Promise<RelationshipEdge> {

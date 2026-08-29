@@ -48,6 +48,12 @@ function toDomain(r: ObjectRow): WorkspaceObject {
   };
 }
 
+/** Resource bound for whole-workspace reads. Never an authorization bound. */
+export const DEFAULT_GRAPH_LIMIT = 5000;
+const MAX_GRAPH_LIMIT = 20_000;
+export const clampLimit = (n: number): number =>
+  Number.isFinite(n) ? Math.min(Math.max(Math.trunc(n), 1), MAX_GRAPH_LIMIT) : DEFAULT_GRAPH_LIMIT;
+
 const COLS =
   'id, workspace_id, type, title, body, attributes, home_project_id, owner_id, created_by, created_at, updated_at';
 
@@ -60,6 +66,21 @@ export function makeObjectRepository(uow: UnitOfWork): ObjectRepository {
         [id, ...vis.params],
       );
       return rows[0] ? toDomain(rows[0]) : null;
+    },
+
+    async listVisible(scope: ResolvedScope, limit = DEFAULT_GRAPH_LIMIT) {
+      // Whole-workspace read for the context graph (P3.2). The visibility
+      // fragment is identical to every other read — there is no graph-specific
+      // authorization path that could drift from the policy (INV-3).
+      const vis = objectSqlFragment(scope, 'o', 1);
+      const { rows } = await uow.query<ObjectRow>(
+        `SELECT ${COLS} FROM object o
+          WHERE ${vis.text}
+          ORDER BY o.created_at ASC, o.id ASC
+          LIMIT $${vis.params.length + 1}`,
+        [...vis.params, clampLimit(limit)],
+      );
+      return rows.map(toDomain);
     },
 
     async listByHomeProject(scope: ResolvedScope, projectId: ProjectId) {

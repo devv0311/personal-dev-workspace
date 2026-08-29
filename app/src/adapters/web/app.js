@@ -1,351 +1,570 @@
-// P3.1 static visual shell — wiring.
-// Real data via the P2.7 API only (/api/me, /api/projects, /api/projects/:id,
-// POST notes). The centre is a STATIC SVG built to read as the RUBRIC
-// reference: concentric Applications / Routines / Memory layers, project
-// nodes near the core, a particle core. No graph engine, no physics.
+// P3.2 — shell wiring for the interactive Context Graph.
+//
+// Every node, edge and inspector field below comes from the P2.7 API under the
+// current principal: /api/graph, /api/objects/:id, /api/projects/:id/notes.
+// There is no mock graph dataset. The same object id is the graph node id, the
+// inspector subject, the capture target and the API path — one object, one id,
+// end to end.
+
+import { createGraphView } from './graph-view.js';
+import { filterChipsFor, searchNodes, metaFor } from './graph-model.js';
 
 const KNOWN_PRINCIPALS = [
   { id: '00000000-0000-4000-8000-0000000000a1', label: 'Alice · owner' },
   { id: '00000000-0000-4000-8000-0000000000b0', label: 'Bob · no access' },
 ];
 
-const NS = 'http://www.w3.org/2000/svg';
-const CX = 500, CY = 500;
-const R_APPS = 478, R_RT = 410, R_MEM = 338, R_CORE = 150, R_PROJ = 128;
-
 const state = {
   principalId: localStorage.getItem('dc.principalId') || KNOWN_PRINCIPALS[0].id,
-  projects: [],
-  selectedId: null,
+  graph: { nodes: [], edges: [], stats: { projects: 0, captures: 0 } },
+  selected: null, // { node, detail }
+  results: [],
+  resultIndex: -1,
 };
 const $ = (id) => document.getElementById(id);
 
-/* ---- API ---- */
+/* ------------------------------------------------------------------- API -- */
 async function api(path, opts = {}) {
   const res = await fetch(path, {
     ...opts,
-    headers: { 'content-type': 'application/json', authorization: `Dev ${state.principalId}`, ...(opts.headers || {}) },
+    headers: {
+      'content-type': 'application/json',
+      authorization: `Dev ${state.principalId}`,
+      ...(opts.headers || {}),
+    },
   });
   const text = await res.text();
   const data = text ? JSON.parse(text) : {};
-  if (!res.ok) { const e = new Error(data.error || `HTTP ${res.status}`); e.status = res.status; throw e; }
+  if (!res.ok) {
+    const e = new Error(data.error || `HTTP ${res.status}`);
+    e.status = res.status;
+    throw e;
+  }
   return data;
 }
 
-/* ---- deterministic PRNG ---- */
-function rng(seed) {
-  return () => {
-    seed = (seed + 0x6d2b79f5) | 0;
-    let t = Math.imul(seed ^ (seed >>> 15), 1 | seed);
-    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
-    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
-  };
-}
-function el(name, attrs, parent) {
-  const n = document.createElementNS(NS, name);
-  for (const [k, v] of Object.entries(attrs)) n.setAttribute(k, String(v));
-  if (parent) parent.append(n);
-  return n;
-}
-function hexPath(cx, cy, r) {
-  let d = '';
-  for (let i = 0; i < 6; i++) {
-    const a = -Math.PI / 2 + i * Math.PI / 3;
-    d += (i ? 'L' : 'M') + (cx + Math.cos(a) * r).toFixed(1) + ' ' + (cy + Math.sin(a) * r).toFixed(1) + ' ';
-  }
-  return d + 'Z';
-}
+/* ----------------------------------------------------------------- graph -- */
 
-/* ---- static scaffold: rings, layer labels, apps + routines nodes, core ---- */
-const APP_GLYPHS = ['◆', '●', '▲', '■', '✦', '◇', '◈', '▸', '✕', '◎'];
+const view = createGraphView({
+  svg: $('fsvg'),
+  tip: $('node-tip'),
+  onSelect: (node) => {
+    if (!node) closeInspector();
+    else openInspector(node);
+  },
+  onState: (s) => {
+    if (typeof s.zoom === 'number') $('g-zoom').textContent = `${Math.round(s.zoom * 100)}%`;
+    if (typeof s.visible === 'number') $('ro-tr').textContent = `${s.visible} / ${s.total} NODES`;
+  },
+});
 
-function buildScaffold() {
-  const rg = $('f-rings'); rg.textContent = '';
-  el('circle', { class: 'ring apps spin', cx: CX, cy: CY, r: R_APPS }, rg);
-  el('circle', { class: 'ring routines', cx: CX, cy: CY, r: R_RT }, rg);
-  el('circle', { class: 'ring memory', cx: CX, cy: CY, r: R_MEM }, rg);
-
-  const lg = $('f-labels'); lg.textContent = '';
-  const lbl = (r, cls, txt) => { const t = el('text', { class: `ring-label ${cls}`, x: CX, y: CY - r + 22 }, lg); t.textContent = txt; };
-  lbl(R_APPS, 'apps', 'Applications');
-  lbl(R_RT, 'routines', 'Routines');
-  lbl(R_MEM, 'memory', 'Memory');
-
-  // applications ring — hex icon badges (representative / offline)
-  const ag = $('f-apps'); ag.textContent = '';
-  const nApps = 16;
-  for (let i = 0; i < nApps; i++) {
-    const a = -Math.PI / 2 + 0.19 + (i / nApps) * Math.PI * 2;
-    const x = CX + Math.cos(a) * R_APPS, y = CY + Math.sin(a) * R_APPS;
-    const g = el('g', { class: 'app-badge dim', transform: `translate(${x.toFixed(1)} ${y.toFixed(1)})`, 'aria-hidden': 'true' }, ag);
-    el('path', { class: 'hex', d: hexPath(0, 0, 15) }, g);
-    const t = el('text', { class: 'g', y: 0.5 }, g);
-    t.textContent = APP_GLYPHS[i % APP_GLYPHS.length];
-  }
-
-  // routines ring — small nodes
-  const rt = $('f-rt'); rt.textContent = '';
-  const nRt = 30;
-  for (let i = 0; i < nRt; i++) {
-    const a = -Math.PI / 2 + 0.11 + (i / nRt) * Math.PI * 2;
-    el('circle', { class: 'rt-node', cx: (CX + Math.cos(a) * R_RT).toFixed(1), cy: (CY + Math.sin(a) * R_RT).toFixed(1), r: 3.4 }, rt);
-  }
-
-  // particle core — a tight dense cloud, mostly memory-purple with accent specks
-  const cg = $('f-core'); cg.textContent = '';
-  const r1 = rng(0x9e3779b9);
-  for (let i = 0; i < 340; i++) {
-    const ang = r1() * Math.PI * 2;
-    const rad = Math.pow(r1(), 0.85) * (R_CORE - 10);
-    const roll = r1();
-    const fill = roll > 0.92 ? 'var(--action)' : roll > 0.85 ? 'var(--apps)' : 'var(--memory)';
-    el('circle', {
-      class: 'core-dot',
-      cx: (CX + Math.cos(ang) * rad).toFixed(1), cy: (CY + Math.sin(ang) * rad).toFixed(1),
-      r: (0.5 + r1() * 1.4).toFixed(2), fill, opacity: (0.28 + r1() * 0.5).toFixed(2),
-    }, cg);
-  }
-  const r2 = rng(0x1234abcd);
-  for (let i = 0; i < 22; i++) {
-    const a1 = r2() * Math.PI * 2, a2 = a1 + (r2() - 0.5) * 1.1;
-    const rr1 = r2() * (R_CORE - 16), rr2 = r2() * (R_CORE - 16);
-    el('line', { class: 'core-link',
-      x1: (CX + Math.cos(a1) * rr1).toFixed(1), y1: (CY + Math.sin(a1) * rr1).toFixed(1),
-      x2: (CX + Math.cos(a2) * rr2).toFixed(1), y2: (CY + Math.sin(a2) * rr2).toFixed(1) }, cg);
-  }
-
-  // centre hex node
-  const ce = $('f-centre'); ce.textContent = '';
-  el('path', { class: 'corehex', d: hexPath(CX, CY, 26) }, ce);
-  const ct = el('text', { class: 'core-label', x: CX, y: CY + 44 }, ce);
-  ct.textContent = 'CONTEXT.CORE';
-}
-
-/* ---- data-driven layer: memory dot-arcs + project nodes + edges ---- */
-function renderField() {
-  const memG = $('f-mem'), edgeG = $('f-edges'), projG = $('f-projects');
-  memG.textContent = ''; edgeG.textContent = ''; projG.textContent = '';
-
-  const projects = state.projects;
-  const nProj = projects.length;
-  const totalCtx = projects.reduce((n, p) => n + (p.captures?.length || 0), 0);
-  $('ro-tr').textContent = `${nProj} PROJ · ${totalCtx} CTX`;
-  $('field-empty').hidden = nProj > 0;
-
-  // MEMORY FIELD — a full 360° field of dense concentric dot-rings, always
-  // visible as a faint scaffold. Each project forms a bright "cluster" wedge
-  // centred on its node angle; the number of inner rings lit in that wedge
-  // tracks its real capture count (reference B: BUSINESS / CONTENT / … wedges).
-  const ARCS = 22;
-  const rr = rng(0xbeef1);
-  const startAngle = -Math.PI / 2 + 0.55; // first project at ~10 o'clock
-  const clusters = projects.map((p, i) => ({
-    ang: startAngle + (i / Math.max(nProj, 1)) * Math.PI * 2,
-    lit: Math.min(p.captures?.length || 0, ARCS),
-    selected: p.id === state.selectedId,
-  }));
-  const HALF = 0.46; // ~26° half-width wedge
-  const R_IN = R_CORE + 12, R_OUT = R_MEM - 12;
-  for (let a = 0; a < ARCS; a++) {
-    const radius = R_IN + (a / (ARCS - 1)) * (R_OUT - R_IN);
-    const step = 5.0 / radius;
-    for (let ang = 0; ang < Math.PI * 2 - 1e-6; ang += step) {
-      // strongest cluster influence at this angle
-      let boost = 0, sel = false;
-      for (const c of clusters) {
-        let d = Math.abs(((ang - c.ang + Math.PI) % (Math.PI * 2)) - Math.PI);
-        if (d < HALF && a < c.lit) {
-          const w = 1 - d / HALF;
-          if (w > boost) { boost = w; sel = c.selected; }
-        }
-      }
-      const R = radius + (rr() - 0.5) * 2.4;
-      const on = boost > 0.05;
-      el('circle', {
-        class: 'mem-dot',
-        cx: (CX + Math.cos(ang) * R).toFixed(1),
-        cy: (CY + Math.sin(ang) * R).toFixed(1),
-        r: on ? (1.4 + boost * 0.9).toFixed(1) : 1.0,
-        opacity: (on ? (sel ? 0.5 + boost * 0.45 : 0.4 + boost * 0.4) : 0.22 + rr() * 0.16).toFixed(2),
-      }, memG);
-    }
-  }
-
-  // PROJECT NODES — small labelled dots near the core (like reference B's
-  // BUSINESS / CONTENT / … sub-clusters), one per real project; edge to centre.
-  projects.forEach((p, i) => {
-    const a = startAngle + (i / Math.max(nProj, 1)) * Math.PI * 2;
-    const x = CX + Math.cos(a) * R_PROJ, y = CY + Math.sin(a) * R_PROJ;
-    const selected = p.id === state.selectedId;
-    el('line', { class: `edge-line${selected ? ' hot' : ''}`, x1: CX, y1: CY, x2: x.toFixed(1), y2: y.toFixed(1) }, edgeG);
-
-    const g = el('g', {
-      class: `pnode${selected ? ' selected' : ''}`, tabindex: '0', role: 'button',
-      'aria-label': `Project ${p.title}, ${p.captures?.length || 0} captured context items`,
-      transform: `translate(${x.toFixed(1)} ${y.toFixed(1)})`,
-    }, projG);
-    el('circle', { class: 'hit', r: 20, fill: 'transparent' }, g); // generous click target
-    el('circle', { class: 'disc', r: 8 }, g);
-    const below = Math.sin(a) > 0;
-    const lbl = el('text', { class: 'lbl', y: below ? 21 : -15 }, g);
-    lbl.textContent = (p.title.length > 22 ? p.title.slice(0, 21) + '…' : p.title).toUpperCase();
-    const go = () => selectProject(p.id);
-    g.addEventListener('click', go);
-    g.addEventListener('keydown', (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); go(); } });
-  });
-}
-
-/* ---- inspector ---- */
-function closeInspector() {
-  state.selectedId = null;
-  $('center').classList.remove('inspecting');
-  renderField();
-  $('pulse-name').textContent = 'No project selected';
-  $('pulse-captures').textContent = '0';
-  $('cap-submit').disabled = true;
-  $('cap-status').textContent = 'Select a project first.';
-  renderActGrid(0);
-}
-
-async function selectProject(id) {
-  state.selectedId = id;
-  renderField();
+async function loadGraph({ keepSelection = true } = {}) {
   try {
-    const view = await api(`/api/projects/${id}`);
-    const p = state.projects.find((x) => x.id === id);
-    if (p) { p.captures = view.captures; renderField(); }
+    const graph = await api('/api/graph');
+    state.graph = graph;
+    view.render(graph);
+    renderFilters(graph);
+    renderPulse(graph);
 
-    $('center').classList.add('inspecting');
-    $('ins-title').textContent = view.project.title;
-    $('ins-id').textContent = view.project.id.slice(0, 8) + '…';
-    const ct = view.captures.length === 1 ? '1 capture' : `${view.captures.length} captures`;
-    $('ins-count').textContent = ct;
+    $('field-empty').hidden = graph.stats.projects > 0 || graph.stats.captures > 0;
+    $('ro-tl').textContent = `CONTEXT GRAPH · LIVE · ${graph.workspaceId.slice(0, 8)}`;
 
-    const list = $('ctx-list'); list.textContent = '';
-    $('ctx-empty').hidden = view.captures.length > 0;
-    for (const { object, anchoredBy } of view.captures) {
-      const li = document.createElement('li');
-      const h = document.createElement('h3'); h.textContent = object.title || '(untitled note)'; li.append(h);
-      if (object.body) { const pr = document.createElement('p'); pr.textContent = object.body; li.append(pr); }
-      const edge = document.createElement('span'); edge.className = 'edge';
-      const code = document.createElement('code'); code.textContent = anchoredBy.verb;
-      edge.append(code, document.createTextNode(' → this project'));
-      if (anchoredBy.synthesised) edge.append(document.createTextNode('  (home_project_id)'));
-      li.append(edge); list.append(li);
+    const keep = keepSelection && state.selected ? state.selected.node.id : null;
+    if (keep && graph.nodes.some((n) => n.id === keep)) view.select(keep);
+    else closeInspector();
+  } catch (err) {
+    state.graph = { nodes: [], edges: [], stats: { projects: 0, captures: 0 } };
+    view.render(state.graph);
+    renderFilters(state.graph);
+    renderPulse(state.graph);
+    closeInspector();
+    const empty = $('field-empty');
+    empty.hidden = false;
+    empty.querySelector('.big').textContent =
+      err.status === 401 ? 'Not authenticated' : 'Could not load the context graph';
+  }
+}
+
+/* --------------------------------------------------------------- filters -- */
+
+function renderFilters(graph) {
+  const host = $('g-filters');
+  host.textContent = '';
+  const chips = filterChipsFor(graph);
+  for (const chip of chips) {
+    const b = document.createElement('button');
+    b.className = `chip on ${chip.accent}`;
+    b.type = 'button';
+    b.dataset.type = chip.key;
+    b.setAttribute('aria-pressed', 'true');
+    b.innerHTML = `<span class="sw"></span>${chip.label}<span class="n">${chip.count}</span>`;
+    b.onclick = () => {
+      const on = b.classList.toggle('on');
+      b.setAttribute('aria-pressed', String(on));
+      view.setTypeFilter(chip.key, on);
+    };
+    host.append(b);
+  }
+  // Scaffold layers: no integration is connected and no routine engine exists,
+  // so these are toggles over the offline orbit scaffold, labelled as such.
+  for (const [key, label] of [
+    ['apps', 'Apps'],
+    ['routines', 'Routines'],
+  ]) {
+    const b = document.createElement('button');
+    b.className = `chip on ${key} scaffold`;
+    b.type = 'button';
+    b.setAttribute('aria-pressed', 'true');
+    b.title = 'Orbit scaffold — no integration connected yet';
+    b.innerHTML = `<span class="sw"></span>${label}`;
+    b.onclick = () => {
+      const on = b.classList.toggle('on');
+      b.setAttribute('aria-pressed', String(on));
+      view.setScaffold(key, on);
+    };
+    host.append(b);
+  }
+}
+
+/* ------------------------------------------------------------- inspector -- */
+
+const fmtDate = (iso) => {
+  if (!iso) return '—';
+  try {
+    return new Date(iso).toLocaleString(undefined, {
+      day: '2-digit',
+      month: 'short',
+      year: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit',
+    });
+  } catch {
+    return iso;
+  }
+};
+
+function closeInspector() {
+  state.selected = null;
+  $('center').classList.remove('inspecting');
+  $('cap-submit').disabled = true;
+  $('cap-target').textContent = 'Select a project to capture into.';
+  $('cap-status').textContent = 'Select a project first.';
+  $('cap-status').className = '';
+  renderPulse(state.graph);
+}
+
+/** Which real project a capture would be written into, given the selection. */
+function captureTarget(node) {
+  if (!node) return null;
+  if (node.type === 'project') return { id: node.id, title: node.title };
+  if (node.homeProjectId) {
+    const p = state.graph.nodes.find((n) => n.id === node.homeProjectId);
+    return p ? { id: p.id, title: p.title } : null;
+  }
+  return null;
+}
+
+async function openInspector(node) {
+  const meta = metaFor(node.type);
+  $('center').classList.add('inspecting');
+  $('ins-title').textContent = node.title || '(untitled)';
+  $('ins-type').textContent = meta.label;
+  $('ins-dot').className = `dot ${meta.accent === 'context' ? 'action' : meta.accent}`;
+  $('ins-id').textContent = `${node.id.slice(0, 8)}…`;
+  $('ins-body').hidden = true;
+  $('ctx-list').textContent = '';
+  $('rel-list').textContent = '';
+  $('ctx-empty').hidden = true;
+  $('rel-empty').hidden = true;
+  $('ins-children-label').hidden = true;
+
+  const target = captureTarget(node);
+  $('cap-target').textContent = target ? `→ ${target.title}` : 'Capture needs a project.';
+  $('cap-submit').disabled = !target;
+  $('cap-status').textContent = target ? 'Ready.' : 'Select a project first.';
+  $('cap-status').className = '';
+
+  // The workspace root has no persisted object row — describe it from the
+  // graph itself rather than inventing an object.
+  if (node.kind === 'workspace') {
+    state.selected = { node, detail: null };
+    $('ins-meta').textContent = `WORKSPACE ${node.id}`;
+    $('ins-count').textContent = `${state.graph.stats.projects} projects · ${state.graph.stats.captures} context`;
+    $('ins-children-label').hidden = false;
+    $('ins-children-label').textContent = 'Projects';
+    for (const p of state.graph.nodes.filter((n) => n.type === 'project')) {
+      $('ctx-list').append(contextRow(p.id, p.title, '', 'project'));
+    }
+    $('ctx-empty').hidden = state.graph.stats.projects > 0;
+    $('rel-empty').hidden = false;
+    $('rel-empty').textContent = 'Structural containment only.';
+    renderPulse(state.graph, node);
+    return;
+  }
+
+  try {
+    const detail = await api(`/api/objects/${node.id}`);
+    state.selected = { node, detail };
+
+    const o = detail.object;
+    $('ins-title').textContent = o.title || '(untitled note)';
+    $('ins-meta').textContent = `CREATED ${fmtDate(o.createdAt)} · UPDATED ${fmtDate(o.updatedAt)}`;
+    if (o.body) {
+      $('ins-body').textContent = o.body;
+      $('ins-body').hidden = false;
     }
 
-    $('pulse-name').textContent = view.project.title.toUpperCase();
-    $('pulse-captures').textContent = String(view.captures.length);
-    renderActGrid(view.captures.length);
-    $('cap-submit').disabled = false;
-    $('cap-status').textContent = 'Ready.'; $('cap-status').className = '';
+    if (detail.children.length > 0 || o.type === 'project') {
+      $('ins-children-label').hidden = false;
+      $('ins-children-label').textContent = 'Captured context';
+      for (const child of detail.children) {
+        $('ctx-list').append(contextRow(child.id, child.title || '(untitled note)', child.body, child.type));
+      }
+      $('ctx-empty').hidden = detail.children.length > 0;
+    }
+
+    const rels = detail.edges;
+    for (const r of rels) {
+      $('rel-list').append(relationshipRow(r, o.id));
+    }
+    $('rel-empty').hidden = rels.length > 0;
+
+    const n = detail.children.length;
+    $('ins-count').textContent =
+      o.type === 'project'
+        ? `${n} capture${n === 1 ? '' : 's'} · ${rels.length} link${rels.length === 1 ? '' : 's'}`
+        : `${rels.length} relationship${rels.length === 1 ? '' : 's'}`;
+
+    renderPulse(state.graph, node, detail);
   } catch (err) {
-    $('center').classList.add('inspecting');
-    $('ins-title').textContent = err.status === 404 ? 'Not available to you' : 'Error';
-    $('ctx-list').textContent = ''; $('ctx-empty').hidden = false;
-    $('ctx-empty').textContent = err.status === 404
-      ? 'This project is not visible to the current principal.' : err.message;
+    state.selected = { node, detail: null };
+    $('ins-meta').textContent = '';
+    $('ctx-empty').hidden = false;
+    $('ctx-empty').textContent =
+      err.status === 404
+        ? 'This object is not visible to the current principal.'
+        : err.message;
     $('cap-submit').disabled = true;
   }
 }
 
+/** A row that traverses to another REAL object in the graph. */
+function contextRow(id, title, body, type) {
+  const li = document.createElement('li');
+  const btn = document.createElement('button');
+  btn.type = 'button';
+  btn.className = 'ctx-row';
+  const h = document.createElement('h3');
+  h.textContent = title;
+  btn.append(h);
+  if (body) {
+    const p = document.createElement('p');
+    p.textContent = body;
+    btn.append(p);
+  }
+  const tag = document.createElement('span');
+  tag.className = 'edge';
+  const code = document.createElement('code');
+  code.textContent = metaFor(type).label.toLowerCase();
+  tag.append(code, document.createTextNode(' · open in graph'));
+  btn.append(tag);
+  btn.onclick = () => view.revealAndFocus(id);
+  li.append(btn);
+  return li;
+}
+
+/** One real relationship edge, traversable to the object at its far end. */
+function relationshipRow(r, selfId) {
+  const li = document.createElement('li');
+  const arrow = r.direction === 'out' ? '→' : '←';
+  const btn = document.createElement('button');
+  btn.type = 'button';
+  btn.className = 'rel-row';
+  btn.disabled = !r.other;
+
+  const verb = document.createElement('code');
+  verb.textContent = r.edge.verb;
+  const dir = document.createElement('span');
+  dir.className = 'ar';
+  dir.textContent = arrow;
+  const other = document.createElement('span');
+  other.className = 'ot';
+  other.textContent = r.other ? r.other.title || '(untitled)' : 'not visible';
+
+  const prov = document.createElement('span');
+  prov.className = 'pv';
+  prov.textContent = r.edge.synthesised
+    ? r.edge.provenance.kind
+    : `${r.edge.origin} · ${r.edge.confidenceState}`;
+
+  btn.append(verb, dir, other, prov);
+  if (r.other) btn.onclick = () => view.revealAndFocus(r.other.id);
+  li.append(btn);
+  return li;
+}
+
+/* ------------------------------------------------------------ left rail -- */
+
+function renderPulse(graph, node = null, detail = null) {
+  const captures = graph.stats?.captures ?? 0;
+  if (node && node.type === 'project') {
+    $('pulse-name').textContent = node.title.toUpperCase();
+    $('pulse-captures').textContent = String(detail ? detail.children.length : 0);
+    renderActGrid(detail ? detail.children.length : 0);
+  } else if (node) {
+    $('pulse-name').textContent = (node.title || 'CONTEXT CORE').toUpperCase();
+    $('pulse-captures').textContent = String(captures);
+    renderActGrid(captures);
+  } else {
+    const n = graph.stats?.projects ?? 0;
+    $('pulse-name').textContent = n
+      ? `${n} PROJECT${n === 1 ? '' : 'S'} IN VIEW`
+      : 'No project selected';
+    $('pulse-captures').textContent = String(captures);
+    renderActGrid(captures);
+  }
+}
 function renderActGrid(count) {
-  const g = $('actgrid'); g.textContent = '';
-  for (let i = 0; i < 20; i++) { const c = document.createElement('i'); if (i < Math.min(count, 20)) c.className = 'on'; g.append(c); }
+  const g = $('actgrid');
+  g.textContent = '';
+  for (let i = 0; i < 20; i++) {
+    const c = document.createElement('i');
+    if (i < Math.min(count, 20)) c.className = 'on';
+    g.append(c);
+  }
 }
 function renderQGrid() {
-  const g = $('qgrid'); g.textContent = '';
+  const g = $('qgrid');
+  g.textContent = '';
   const now = new Date();
-  const cell = Math.floor((now.getHours() * 60 + now.getMinutes()) / (1440 / 52)); // 52 cells ≈ a work-year quarter grid
+  const cell = Math.floor((now.getHours() * 60 + now.getMinutes()) / (1440 / 52));
   for (let i = 0; i < 52; i++) {
     const c = document.createElement('i');
-    if (i === cell % 52) c.className = 'now'; else if (i < cell % 52) c.className = 'done';
+    if (i === cell % 52) c.className = 'now';
+    else if (i < cell % 52) c.className = 'done';
     g.append(c);
   }
 }
 
-/* ---- boot ---- */
-async function loadProjects() {
-  try { await api('/api/me'); } catch { /* auth handled per-request */ }
-  try {
-    const { projects } = await api('/api/projects');
-    state.projects = await Promise.all(projects.map(async (p) => {
-      try { const v = await api(`/api/projects/${p.id}`); return { ...p, captures: v.captures }; }
-      catch { return { ...p, captures: [] }; }
-    }));
-    if (state.selectedId && !state.projects.some((p) => p.id === state.selectedId)) closeInspector();
-    else renderField();
-  } catch (err) {
-    state.projects = []; renderField(); closeInspector();
-    $('field-empty').hidden = false;
-    $('field-empty').querySelector('.big').textContent = err.status === 401 ? 'Not authenticated' : 'Could not load context';
+/* ---------------------------------------------------------------- search -- */
+
+function renderResults() {
+  const host = $('g-results');
+  host.textContent = '';
+  if (state.results.length === 0) {
+    host.hidden = true;
+    view.setMatches([]);
+    return;
   }
+  state.results.forEach((n, i) => {
+    const li = document.createElement('li');
+    li.setAttribute('role', 'option');
+    li.setAttribute('aria-selected', String(i === state.resultIndex));
+    if (i === state.resultIndex) li.className = 'cur';
+    const meta = metaFor(n.type);
+    const sw = document.createElement('span');
+    sw.className = `sw ${meta.accent}`;
+    const t = document.createElement('span');
+    t.className = 'rt';
+    t.textContent = n.title || n.snippet || '(untitled)';
+    const k = document.createElement('span');
+    k.className = 'rk';
+    k.textContent = meta.label;
+    li.append(sw, t, k);
+    li.onclick = () => pickResult(i);
+    host.append(li);
+  });
+  host.hidden = false;
+  view.setMatches(state.results.map((n) => n.id));
+}
+
+function pickResult(i) {
+  const node = state.results[i];
+  if (!node) return;
+  state.resultIndex = i;
+  view.revealAndFocus(node.id);
+  renderResults();
+}
+
+function wireSearch() {
+  const input = $('g-search');
+  input.oninput = () => {
+    state.results = searchNodes(state.graph, input.value, 8);
+    state.resultIndex = state.results.length ? 0 : -1;
+    renderResults();
+  };
+  input.onkeydown = (e) => {
+    if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+      e.preventDefault();
+      if (!state.results.length) return;
+      const d = e.key === 'ArrowDown' ? 1 : -1;
+      state.resultIndex = (state.resultIndex + d + state.results.length) % state.results.length;
+      renderResults();
+    } else if (e.key === 'Enter') {
+      e.preventDefault();
+      pickResult(state.resultIndex < 0 ? 0 : state.resultIndex);
+    } else if (e.key === 'Escape') {
+      input.value = '';
+      state.results = [];
+      state.resultIndex = -1;
+      renderResults();
+    }
+  };
+}
+
+/* ------------------------------------------------------------ chrome ---- */
+
+function wireGraphControls() {
+  $('g-focus').onclick = () => view.focus();
+  $('g-reset').onclick = () => {
+    view.resetView();
+    view.select(null);
+  };
+  $('p-graph').onclick = () => view.resetView();
+  $('g-in').onclick = () => view.zoomBy(1.3);
+  $('g-out').onclick = () => view.zoomBy(1 / 1.3);
+  $('g-expand').onclick = () => view.expandAll();
+  $('g-collapse').onclick = () => view.collapseAll();
+  $('ins-focus').onclick = () => view.focus();
+  $('gctl-toggle').onclick = () => {
+    const panel = $('gctl');
+    const open = !panel.classList.toggle('folded');
+    $('gctl-toggle').setAttribute('aria-expanded', String(open));
+    $('gctl-toggle').textContent = open ? '▾' : '▸';
+  };
 }
 
 function wirePrincipal() {
-  const sel = $('principal'); sel.innerHTML = '';
+  const sel = $('principal');
+  sel.innerHTML = '';
   for (const p of KNOWN_PRINCIPALS) {
-    const o = document.createElement('option'); o.value = p.id; o.textContent = p.label;
-    if (p.id === state.principalId) o.selected = true; sel.append(o);
+    const o = document.createElement('option');
+    o.value = p.id;
+    o.textContent = p.label;
+    if (p.id === state.principalId) o.selected = true;
+    sel.append(o);
   }
-  sel.onchange = () => { state.principalId = sel.value; localStorage.setItem('dc.principalId', state.principalId); loadProjects(); };
+  sel.onchange = () => {
+    state.principalId = sel.value;
+    localStorage.setItem('dc.principalId', state.principalId);
+    state.selected = null;
+    view.select(null);
+    loadGraph({ keepSelection: false });
+  };
 }
 
 function wireCapture() {
-  const focus = () => { $('note-title').focus(); $('note-title').scrollIntoView({ block: 'center', behavior: 'smooth' }); };
+  const focusForm = () => {
+    $('note-title').focus();
+    $('note-title').scrollIntoView({ block: 'center', behavior: 'smooth' });
+  };
   for (const id of ['tool-capture', 'skill-capture']) {
     const e = $(id);
-    e.addEventListener('click', () => { if (!state.selectedId && state.projects[0]) selectProject(state.projects[0].id); setTimeout(focus, 60); });
-    e.addEventListener('keydown', (ev) => { if (ev.key === 'Enter' || ev.key === ' ') { ev.preventDefault(); e.click(); } });
+    e.addEventListener('click', () => {
+      if (!state.selected) {
+        const first = state.graph.nodes.find((n) => n.type === 'project');
+        if (first) view.revealAndFocus(first.id);
+      }
+      setTimeout(focusForm, 80);
+    });
+    e.addEventListener('keydown', (ev) => {
+      if (ev.key === 'Enter' || ev.key === ' ') {
+        ev.preventDefault();
+        e.click();
+      }
+    });
   }
-  $('ins-close').onclick = closeInspector;
+  $('ins-close').onclick = () => view.select(null);
+
   $('cap-form').onsubmit = async (e) => {
     e.preventDefault();
-    if (!state.selectedId) return;
-    const st = $('cap-status'), sb = $('cap-submit');
-    const title = $('note-title').value.trim(), body = $('note-body').value.trim();
-    if (!title && !body) { st.textContent = 'Enter a title or body.'; st.className = 'err'; return; }
-    sb.disabled = true; st.textContent = 'Persisting…'; st.className = '';
+    const target = captureTarget(state.selected?.node);
+    if (!target) return;
+    const st = $('cap-status');
+    const sb = $('cap-submit');
+    const title = $('note-title').value.trim();
+    const body = $('note-body').value.trim();
+    if (!title && !body) {
+      st.textContent = 'Enter a title or body.';
+      st.className = 'err';
+      return;
+    }
+    sb.disabled = true;
+    st.textContent = 'Persisting…';
+    st.className = '';
     try {
-      await api(`/api/projects/${state.selectedId}/notes`, { method: 'POST', body: JSON.stringify({ title, body }) });
-      $('note-title').value = ''; $('note-body').value = '';
-      st.textContent = 'Captured and persisted.'; st.className = 'ok';
-      await selectProject(state.selectedId);
-    } catch (err) { st.textContent = `Not saved: ${err.message}`; st.className = 'err'; }
-    finally { sb.disabled = false; }
+      const { note } = await api(`/api/projects/${target.id}/notes`, {
+        method: 'POST',
+        body: JSON.stringify({ title, body }),
+      });
+      $('note-title').value = '';
+      $('note-body').value = '';
+      await loadGraph();
+      // CAPTURE → CONNECT: the new object appears in the graph, already anchored.
+      // Reported after the reload, which repaints the inspector.
+      if (note?.id) view.setMatches([note.id]);
+      st.textContent = 'Captured, persisted and connected.';
+      st.className = 'ok';
+    } catch (err) {
+      st.textContent = `Not saved: ${err.message}`;
+      st.className = 'err';
+    } finally {
+      sb.disabled = false;
+    }
   };
 }
 
 function wireChrome() {
   $('toggle-left').onclick = () => document.body.classList.toggle('drawer-left');
   $('toggle-right').onclick = () => document.body.classList.toggle('drawer-right');
+  $('t-search').onclick = () => $('g-search').focus();
   document.addEventListener('keydown', (e) => {
-    if (e.key === 'Escape') { document.body.classList.remove('drawer-left', 'drawer-right'); if ($('center').classList.contains('inspecting')) closeInspector(); }
-    if (e.key === '/' && !/input|textarea/i.test(document.activeElement?.tagName || '')) { e.preventDefault(); $('t-search').focus(); }
+    const typing = /input|textarea|select/i.test(document.activeElement?.tagName || '');
+    if (e.key === 'Escape') {
+      document.body.classList.remove('drawer-left', 'drawer-right');
+      if ($('center').classList.contains('inspecting')) view.select(null);
+    }
+    if (typing) return;
+    if (e.key === '/') {
+      e.preventDefault();
+      $('g-search').focus();
+    }
+    if (e.key === 'f') view.focus();
+    if (e.key === '0') view.resetView();
+    if (e.key === '+' || e.key === '=') view.zoomBy(1.3);
+    if (e.key === '-') view.zoomBy(1 / 1.3);
   });
 }
 
 function startClock() {
-  const fmt = (d, tz) => d.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit', timeZone: tz, hour12: false });
+  const fmt = (d, tz) =>
+    d.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit', timeZone: tz, hour12: false });
   const tick = () => {
     const now = new Date();
-    $('clock').textContent = now.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false });
+    $('clock').textContent = now.toLocaleTimeString('en-GB', {
+      hour: '2-digit',
+      minute: '2-digit',
+      second: '2-digit',
+      hour12: false,
+    });
     try {
       $('tz-pt').textContent = fmt(now, 'America/Los_Angeles');
       $('tz-et').textContent = fmt(now, 'America/New_York');
       $('tz-ln').textContent = fmt(now, 'Europe/London');
-    } catch { /* older engines */ }
+    } catch {
+      /* older engines */
+    }
     renderQGrid();
   };
   tick();
   setInterval(tick, 20_000);
 }
 
-buildScaffold();
-renderField();
-renderActGrid(0);
 wirePrincipal();
+wireGraphControls();
+wireSearch();
 wireCapture();
 wireChrome();
 startClock();
-loadProjects();
+closeInspector();
+loadGraph({ keepSelection: false });

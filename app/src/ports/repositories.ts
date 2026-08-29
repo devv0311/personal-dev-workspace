@@ -35,6 +35,13 @@ export interface NewObject {
 export interface ObjectRepository {
   /** Visible object by id, or null. Filter-first. */
   findVisible(scope: ResolvedScope, id: ObjectId): Promise<WorkspaceObject | null>;
+  /**
+   * Every object in the scope's workspace the scope may see, oldest first.
+   * Filter-first — the same VisibilityPolicy fragment as every other read.
+   * `limit` bounds the read model for the graph (P3.2); it is a resource bound,
+   * never an authorization bound.
+   */
+  listVisible(scope: ResolvedScope, limit?: number): Promise<WorkspaceObject[]>;
   /** Visible objects whose home project is `projectId`, oldest first. Filter-first. */
   listByHomeProject(
     scope: ResolvedScope,
@@ -53,6 +60,13 @@ export interface RelationshipRepository {
    * — so no consumer special-cases the FK (INV-2, P2.6 §8.2).
    */
   forObject(scope: ResolvedScope, objectId: ObjectId): Promise<RelationshipEdge[]>;
+  /**
+   * Every edge in the scope's workspace the scope may see — the whole-graph form
+   * of forObject(). Same composition: real rows filter-first through
+   * relationshipSqlFragment, UNION the synthesised belongs_to edges, which are
+   * emitted only when BOTH endpoints are visible (INV-3).
+   */
+  listVisible(scope: ResolvedScope, limit?: number): Promise<RelationshipEdge[]>;
   create(
     tx: Tx,
     edge: Omit<RelationshipEdge, 'id' | 'createdAt' | 'synthesised'>,

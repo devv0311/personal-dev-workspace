@@ -137,6 +137,117 @@ authority), then `Design_Dashboard_Aesthetic_Claude_Blueprint.md`:
   real, not representative.
 - Mobile section order: field + capture → Attention rail → tools/pulse rail.
 
+## Interactive context graph (P3.2)
+
+P3.1's Context Field was a static SVG. P3.2 turns it into a real interactive
+graph **without changing the accepted visual system** — same header, rails,
+typography, semantic accents, orbital geometry and memory density. What was
+drawn is now navigable.
+
+**Data source — one, server-side.** `GET /api/graph` returns the whole graph
+the current principal may see; `GET /api/objects/:id` returns one object with
+its edges for the inspector. Both are assembled in
+`application/context-graph.ts` from the same repositories, the same
+`ResolvedScope` and the same `VisibilityPolicy` fragment as every other read
+(INV-3). There is deliberately **no graph-specific authorization path**:
+
+- nodes = `ObjectRepository.listVisible(scope)`
+- edges = `RelationshipRepository.listVisible(scope)` — the whole-graph form of
+  `forObject()`, composed from the identical SQL fragments
+- an assembly-time cross-check drops any edge whose endpoints are not both in
+  the visible node set, so an edge can never imply a node the principal cannot
+  see
+- `stats` are counted from the filtered node set, so counts cannot leak either
+
+Client-side filters, collapse and search operate only on that already-filtered
+payload. **Client filtering is a view concern, never the security boundary.**
+
+**Semantic layers** map real object types onto the accepted P3.1 layers — no
+invented domain semantics:
+
+| Layer | Source | Treatment |
+|---|---|---|
+| `CONTEXT CORE` | the real workspace from the resolved scope | orange hexagon |
+| `CONTEXT` | `project`, `task` | orange disc + label + capture count |
+| `MEMORY` | `note`, `idea`, `decision`, `resource`, `checkpoint` | purple node in its project's wedge |
+| `ROUTINES` / `APPLICATIONS` | **no domain data exists** | offline orbit scaffold: dimmed, non-interactive, filterable, never selectable |
+
+Edges are real: stored `relationship` rows (dashed cyan, authored), the
+synthesised `belongs_to` anchor from `home_project_id` (purple), and structural
+containment computed on read from `object.workspace_id` (faint, labelled
+`origin: 'structural'`). Nothing decorative is drawn as a domain edge.
+
+**Rendering — hand-built SVG, no graph library.** The P3.1 visual system is
+SVG and is locked; a force/flowchart library would impose its own aesthetic and
+its own layout and then have to be fought back to this one. Instead:
+
+- `graph-model.js` — pure, DOM-free: layout, adjacency, neighbourhood, search,
+  filters, focus/zoom maths. Tested directly by `test/graph-model.test.js`
+  (the same file the browser loads, not a copy).
+- `graph-view.js` — all DOM: one transform on a single `#viewport` group
+  carries pan/zoom, so neither re-renders node DOM; strokes use
+  `vector-effect="non-scaling-stroke"` and labels size as `1/zoom`, so both stay
+  legible at any scale; hover/selection/filter only rewrite class attributes.
+- The ambient memory lattice (~6.5k dots) is batched into **three `<path>`
+  elements**, one per opacity tier — the P3.1 density at three DOM nodes instead
+  of thousands. Whole field: ~560 SVG elements. Measured pan and zoom hold
+  60 fps (16.7 ms median, 17.6 ms worst frame at 2048px).
+
+**Layout.** Deterministic and orbital, not physics: workspace at the centre,
+projects on the P3.1 project ring, and each project's captured context fanning
+outward through the memory band inside that project's wedge. In P3.1 the wedge
+was a synthetic cluster "sized by" the capture count; now the lit dots **are**
+the captures, drawn over the ambient lattice that still carries the accepted
+density. Same input ⇒ same positions, so nothing reshuffles on pan, filter or
+reload.
+
+**Interactions:** pan (pointer drag), zoom (wheel/pinch about the cursor, `+`
+`-`, 0.35×–6×), hover (emphasis + HUD readout with real metadata), selection
+(focus the node, highlight its edges, mute the rest, drive the inspector),
+focus (fit the selection's neighbourhood), relationship highlighting,
+local lexical search-to-node (**not** semantic retrieval — a later milestone),
+type filters derived from the types actually present, expand/collapse per
+project (view state only; the data is never touched), keyboard `/` `f` `0`
+`+` `-` `Esc`.
+
+**Context Inspector** shows the real persisted object: title, type, id,
+created/updated, body, its captured context, and every real relationship with
+verb, direction, provenance and confidence. Related rows traverse to the far
+object *in the graph*, so one object keeps one identity across graph →
+inspector → capture → API. Actions stay within what the API already supports:
+traverse, focus, and capture into a real project.
+
+**P3.2 decisions (small, documented):**
+- `RelationshipRepository.forObject()` now also returns the anchors of objects
+  whose home the queried object *is*. It previously under-reported a Project's
+  incident edges, which made the inspector disagree with the graph about the
+  same object. All P2.7 tests pass unchanged.
+- The dev static server sends `cache-control: no-store`, so an edited asset is
+  always the one under test.
+- The dev seed gained a third project shared with Bob, more captured notes and
+  three real relationship rows (one `private`). Bob seeing *exactly one* project
+  is a stronger authorization demonstration than Bob seeing nothing.
+- On viewports ≤720px the graph frames the real content on first load instead of
+  the outer decorative orbits, and touch uses a **two-mode model** so the graph
+  is never a dead-scroll region:
+  - *not engaged* (the fitted view you scroll past) — `touch-action: pan-y`, so a
+    vertical swipe scrolls the page normally. A horizontal-first drag belongs to
+    the graph, and once owned it pans in both axes; the axis is decided once,
+    past a 6px slop, from the press origin.
+  - *engaged* (zoomed past the fitted scale) — `touch-action: none`, so one
+    finger pans in 2D.
+  Pinch always belongs to the graph (`pan-y` grants the browser no pinch-zoom),
+  and pinching in is what engages; **Reset** returns to the page-scroll state.
+  Verified with real CDP touch events: vertical swipe scrolls the page and
+  leaves the transform untouched; horizontal swipe pans the graph and does not
+  scroll; pinch zooms and engages; a vertical swipe while engaged pans the graph
+  without scrolling; Reset disengages; tap still selects.
+- Selection emphasis, the focus transition and a two-beat search-match pulse are
+  the only added motion; all are disabled under `prefers-reduced-motion`.
+
+Verified at 2048 / 1600 / 1140 / 390 with no horizontal overflow and a clean
+console. Evidence: `docs/screenshots/p3.2/`.
+
 ## Deferred (documented, not built here)
 
 Per P2.7 §15 / §16 — belongs to later milestones, not this slice:

@@ -12,8 +12,52 @@ export const SEED = {
   bob: '00000000-0000-4000-8000-0000000000b0',
   projectApi: '00000000-0000-4000-8000-000000000010',
   projectPrivate: '00000000-0000-4000-8000-000000000011',
+  projectShared: '00000000-0000-4000-8000-000000000012',
   noteSeed: '00000000-0000-4000-8000-000000000100',
 } as const;
+
+const SEED_PROJECT = {
+  api: SEED.projectApi,
+  private: SEED.projectPrivate,
+  shared: SEED.projectShared,
+} as const;
+
+/**
+ * Development seed context. Real objects through the real schema — the graph
+ * has no dataset of its own. Fixed ids so screenshots and docs stay stable.
+ */
+const SEED_NOTES: ReadonlyArray<readonly [string, string, string, string]> = [
+  ['00000000-0000-4000-8000-000000000101', SEED_PROJECT.api,
+   'Rate limiter: token bucket',
+   'Sliding-window needs per-key sorted sets; token-bucket is O(1) and good enough for our RPS. Revisit if burst tolerance complaints appear.'],
+  ['00000000-0000-4000-8000-000000000102', SEED_PROJECT.api,
+   'Auth header parsing is the boundary',
+   'The principal must never come from the request body. Derive it once, at the edge, from a credential the server validates.'],
+  ['00000000-0000-4000-8000-000000000103', SEED_PROJECT.api,
+   'Retry budget per upstream',
+   'A global retry budget hides which upstream is actually failing. Budget per upstream, surface the breach as an event.'],
+  ['00000000-0000-4000-8000-000000000104', SEED_PROJECT.api,
+   'Gateway timeouts must be shorter than client timeouts',
+   'Otherwise the client gives up first and we keep burning an upstream connection for nothing.'],
+  ['00000000-0000-4000-8000-000000000105', SEED_PROJECT.api,
+   'Open question: idempotency keys',
+   'Do we require them on every mutating route, or only on payment-adjacent ones? Cost is storage plus a lookup on the hot path.'],
+  ['00000000-0000-4000-8000-000000000110', SEED_PROJECT.private,
+   'Weekend reading list',
+   'Two papers on CRDT convergence and one on transactional outbox failure modes.'],
+  ['00000000-0000-4000-8000-000000000111', SEED_PROJECT.private,
+   'Desk setup: second monitor arrives Thursday',
+   'Move the terminal to the vertical panel once it lands.'],
+  ['00000000-0000-4000-8000-000000000120', SEED_PROJECT.shared,
+   'Lexical retrieval first, vectors later',
+   'Postgres FTS covers the MVP. The RetrievalProvider seam keeps the vector option open without committing to a second datastore.'],
+  ['00000000-0000-4000-8000-000000000121', SEED_PROJECT.shared,
+   'Confidence must be a state, not a float',
+   'A number invites false precision. known / user_confirmed / inferred_high / weak is honest and actionable.'],
+  ['00000000-0000-4000-8000-000000000122', SEED_PROJECT.shared,
+   'Ranking is deterministic before it is smart',
+   'Same inputs, same order. A ranker we cannot reproduce is a ranker we cannot debug.'],
+] as const;
 
 export async function seed(): Promise<void> {
   const pool = getPool();
@@ -48,6 +92,7 @@ export async function seed(): Promise<void> {
     for (const [id, title] of [
       [SEED.projectApi, 'API Gateway Rework'],
       [SEED.projectPrivate, 'Personal Scratch'],
+      [SEED.projectShared, 'Context Engine'],
     ] as const) {
       await client.query(
         `INSERT INTO object (id, workspace_id, type, title, body, owner_id, created_by)
@@ -57,30 +102,60 @@ export async function seed(): Promise<void> {
       );
     }
 
-    // One pre-existing captured note so the project view is immediately non-empty.
+    // Captured context, so the graph has real nodes and real anchors from the
+    // first load. Every one is an ordinary object row created the same way the
+    // capture use case creates them.
+    for (const [id, projectId, title, body] of SEED_NOTES) {
+      await client.query(
+        `INSERT INTO object (id, workspace_id, type, title, body, home_project_id, owner_id, created_by)
+         VALUES ($1, $2, 'note', $3, $4, $5, $6, $6)
+         ON CONFLICT (id) DO NOTHING`,
+        [id, SEED.workspaceId, title, body, projectId, SEED.alice],
+      );
+    }
+
+    // Real stored relationship rows (not synthesised): the graph draws these as
+    // authored edges, distinct from the belongs_to anchor.
+    for (const [from, to, verb, scope] of [
+      ['00000000-0000-4000-8000-000000000102', '00000000-0000-4000-8000-000000000121',
+       'references', 'shared'],
+      ['00000000-0000-4000-8000-000000000104', '00000000-0000-4000-8000-000000000103',
+       'explains', 'shared'],
+      ['00000000-0000-4000-8000-000000000105', '00000000-0000-4000-8000-000000000101',
+       'follows_from', 'private'],
+    ] as const) {
+      await client.query(
+        `INSERT INTO relationship
+           (workspace_id, from_object_id, to_object_id, verb, origin,
+            confidence_state, author_id, visibility_scope, provenance_kind)
+         SELECT $1, $2, $3, $4, 'explicit', 'user_confirmed', $5, $6, 'seed'
+         WHERE NOT EXISTS (
+           SELECT 1 FROM relationship
+            WHERE from_object_id = $2 AND to_object_id = $3 AND verb = $4
+         )`,
+        [SEED.workspaceId, from, to, verb, SEED.alice, scope],
+      );
+    }
+
+    // Exactly one project is shared with Bob. The other two must stay invisible
+    // to him — that asymmetry is what makes the authorization boundary visible.
     await client.query(
-      `INSERT INTO object (id, workspace_id, type, title, body, home_project_id, owner_id, created_by)
-       VALUES ($1, $2, 'note', $3, $4, $5, $6, $6)
-       ON CONFLICT (id) DO NOTHING`,
-      [
-        SEED.noteSeed,
-        SEED.workspaceId,
-        'Chose token-bucket over sliding-window',
-        'Sliding-window needs per-key sorted sets; token-bucket is O(1) and good enough for our RPS. Revisit if burst tolerance complaints appear.',
-        SEED.projectApi,
-        SEED.alice,
-      ],
+      `INSERT INTO project_share (workspace_id, project_id, principal_id, granted_by)
+       VALUES ($1, $2, $3, $4) ON CONFLICT DO NOTHING`,
+      [SEED.workspaceId, SEED.projectShared, SEED.bob, SEED.alice],
     );
 
-    await client.query(
-      `INSERT INTO outbox_event (workspace_id, type, payload)
-       SELECT $1, 'object.created', jsonb_build_object('objectId', $2::text, 'kind', 'created')
-       WHERE NOT EXISTS (
-         SELECT 1 FROM outbox_event
-         WHERE type = 'object.created' AND payload->>'objectId' = $2::text
-       )`,
-      [SEED.workspaceId, SEED.noteSeed],
-    );
+    for (const [id] of SEED_NOTES) {
+      await client.query(
+        `INSERT INTO outbox_event (workspace_id, type, payload)
+         SELECT $1, 'object.created', jsonb_build_object('objectId', $2::text, 'kind', 'created')
+         WHERE NOT EXISTS (
+           SELECT 1 FROM outbox_event
+           WHERE type = 'object.created' AND payload->>'objectId' = $2::text
+         )`,
+        [SEED.workspaceId, id],
+      );
+    }
 
     await client.query('COMMIT');
   } catch (err) {
@@ -94,8 +169,10 @@ export async function seed(): Promise<void> {
     `Seeded ${config.databaseUrl}\n` +
       `  workspace : ${SEED.workspaceId}\n` +
       `  Alice     : ${SEED.alice}   (owns the projects — use as: Authorization: Dev ${SEED.alice})\n` +
-      `  Bob       : ${SEED.bob}   (member, no project access — use to see deny-by-default)\n` +
-      `  project   : ${SEED.projectApi}  "API Gateway Rework"`,
+      `  Bob       : ${SEED.bob}   (member; sees ONLY the shared project)\n` +
+      `  projects  : ${SEED.projectApi}  "API Gateway Rework"      (Alice only)\n` +
+      `              ${SEED.projectPrivate}  "Personal Scratch"        (Alice only)\n` +
+      `              ${SEED.projectShared}  "Context Engine"          (shared with Bob)`,
   );
 }
 
