@@ -198,6 +198,18 @@ test('sharing one project exposes exactly that project and its context — nothi
   assert.ok(!ids.has(IDS.projectB), 'the unshared project must not leak');
   assert.ok(!ids.has(private_.id), 'context in the unshared project must not leak');
 
+  // Counts are derived from the filtered node set, so they cannot leak either:
+  // a count that included the hidden project would disclose its existence.
+  assert.equal(graph.stats.projects, 1, 'the count sees exactly what the graph sees');
+  assert.equal(graph.stats.captures, 1);
+  assert.equal(graph.stats.nodes, graph.nodes.length);
+  assert.deepEqual(graph.stats.byType, { project: 1, note: 1 });
+
+  // Alice's own counts are unaffected — the difference is the boundary.
+  const aliceGraph = await buildContextGraph(container, alice);
+  assert.equal(aliceGraph.stats.projects, 2);
+  assert.equal(aliceGraph.stats.captures, 2);
+
   assertNoDanglingEdges(graph);
 });
 
@@ -262,6 +274,29 @@ test('selecting a node resolves the correct underlying object, with its edges', 
   const project = await inspectObject(container, alice, IDS.projectA);
   assert.equal(project.children.length, 1);
   assert.equal(project.children[0]!.id, note.id);
+});
+
+test('a project reports the anchors of its own context (inspector agrees with graph)', async () => {
+  const alice = await scopeFor(IDS.alice);
+  const a = await captureNote(container, { scope: alice, projectId: IDS.projectA, body: 'one' });
+  const b = await captureNote(container, { scope: alice, projectId: IDS.projectA, body: 'two' });
+
+  const project = await inspectObject(container, alice, IDS.projectA);
+  const anchors = project.edges.filter((e) => e.edge.verb === 'belongs_to' && e.direction === 'in');
+  assert.equal(anchors.length, 2, 'both captures anchor to the project');
+  assert.deepEqual(
+    anchors.map((e) => e.other?.id).sort(),
+    [a.id, b.id].sort(),
+  );
+
+  // The inspector and the graph must agree about the same object's edges.
+  const graph = await buildContextGraph(container, alice);
+  const incident = graph.edges.filter((e) => e.from === IDS.projectA || e.to === IDS.projectA);
+  assert.equal(
+    project.edges.length,
+    incident.length,
+    'inspector edge count matches the graph edge count for that node',
+  );
 });
 
 test('the graph HTTP endpoints enforce the same boundary as the rest of the API', async () => {

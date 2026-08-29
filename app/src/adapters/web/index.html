@@ -17,7 +17,7 @@
     <link rel="stylesheet" href="/styles.css" />
   </head>
   <body>
-    <a class="skip-link" href="#center">Skip to context field</a>
+    <a class="skip-link" href="#g-search">Skip to context search</a>
 
     <div class="shell">
       <!-- ===== HEADER — compact, centred ===== -->
@@ -41,7 +41,7 @@
         </div>
 
         <div class="h-right">
-          <button class="pill ghost" id="p-graph" aria-label="Graph view (preview)">Graph</button>
+          <button class="pill ghost" id="p-graph" aria-label="Reset graph view">Graph</button>
           <select class="principal-select" id="principal" aria-label="Development principal">
             <option value="">…</option>
           </select>
@@ -115,30 +115,72 @@
         </section>
       </aside>
 
-      <!-- ===== CENTRE — context field ===== -->
+      <!-- ===== CENTRE — interactive context graph ===== -->
       <main class="center" id="center">
         <div class="field-wrap">
           <svg class="field-svg" id="fsvg" viewBox="0 0 1000 1000" preserveAspectRatio="xMidYMid meet"
-               role="img" aria-label="Context field — static orbital view. Applications, routines and memory as concentric layers; projects near the core with their captured context. The interactive graph arrives in a later milestone.">
+               role="application" aria-roledescription="Interactive context graph"
+               aria-label="Context graph. Projects and their captured context, drawn from the workspace you can see. Drag to pan, scroll to zoom, click a node to inspect it. Use the search field in the graph controls for keyboard access to any node.">
             <defs>
-              <pattern id="hex" width="34" height="59" patternUnits="userSpaceOnUse" patternTransform="scale(1)">
+              <pattern id="hex" width="34" height="59" patternUnits="userSpaceOnUse">
                 <path class="hexbg" d="M17 0 L34 10 L34 30 L17 40 L0 30 L0 10 Z M17 40 L34 50 L34 59 M0 50 L17 59" />
               </pattern>
             </defs>
-            <rect x="0" y="0" width="1000" height="1000" fill="url(#hex)" />
-            <g id="f-rings"></g>
-            <g id="f-mem"></g>
-            <g id="f-core"></g>
-            <g id="f-edges"></g>
-            <g id="f-apps"></g>
-            <g id="f-rt"></g>
-            <g id="f-labels"></g>
-            <g id="f-projects"></g>
-            <g id="f-centre"></g>
+            <rect class="hexfill" x="-500" y="-500" width="2000" height="2000" fill="url(#hex)" />
+            <!-- one transform on #viewport carries all pan/zoom -->
+            <g id="viewport">
+              <g id="f-rings"></g>
+              <g id="f-mem"></g>
+              <g id="f-core"></g>
+              <g id="f-apps"></g>
+              <g id="f-rt"></g>
+              <g id="f-labels"></g>
+              <g id="g-edges"></g>
+              <g id="g-nodes"></g>
+            </g>
           </svg>
 
-          <div class="field-readout tl" id="ro-tl">CONTEXT FIELD · STATIC · P3.1</div>
-          <div class="field-readout tr" id="ro-tr">0 PROJ · 0 CTX</div>
+          <div class="field-readout tl" id="ro-tl">CONTEXT GRAPH · LIVE</div>
+          <div class="node-tip" id="node-tip" hidden></div>
+
+          <!-- graph control panel (blueprint §14) — only controls the graph
+               actually supports; no decorative physics sliders. -->
+          <section class="gctl" id="gctl" aria-label="Graph controls">
+            <header>
+              <span class="label">Context Graph</span>
+              <span class="mono ct" id="ro-tr">0 / 0</span>
+              <button class="iconbtn" id="gctl-toggle" aria-expanded="true" aria-label="Collapse graph controls">▾</button>
+            </header>
+            <div class="gbody" id="gctl-body">
+              <div class="srch">
+                <span class="ic" aria-hidden="true">⌕</span>
+                <input id="g-search" type="search" placeholder="Search context…" autocomplete="off"
+                       aria-label="Search context nodes" aria-controls="g-results" />
+              </div>
+              <ul class="results" id="g-results" role="listbox" aria-label="Search results" hidden></ul>
+
+              <div class="label">Layers</div>
+              <div class="chips" id="g-filters"></div>
+
+              <div class="label">Structure</div>
+              <div class="btnrow">
+                <button class="pill ghost" id="g-expand">Expand all</button>
+                <button class="pill ghost" id="g-collapse">Collapse all</button>
+              </div>
+
+              <div class="label">View</div>
+              <div class="btnrow">
+                <button class="pill ghost" id="g-focus">Focus</button>
+                <button class="pill ghost" id="g-reset">Reset</button>
+                <span class="zoomctl">
+                  <button class="iconbtn" id="g-out" aria-label="Zoom out">−</button>
+                  <span class="mono" id="g-zoom">100%</span>
+                  <button class="iconbtn" id="g-in" aria-label="Zoom in">+</button>
+                </span>
+              </div>
+            </div>
+          </section>
+
           <div class="legend-pill" aria-label="Layers">
             <span class="li"><span class="sw apps"></span>Apps</span>
             <span class="li"><span class="sw routines"></span>Routines</span>
@@ -148,25 +190,38 @@
 
           <div class="field-empty" id="field-empty" hidden>
             <span class="big">No context nodes</span>
-            <span>Capture something into a project to populate the field.</span>
+            <span>Capture something into a project to populate the graph.</span>
           </div>
 
-          <!-- inspector: slides up only on selection -->
+          <!-- Context Inspector: real persisted data for the selected node -->
           <div class="inspector" id="inspector">
             <div class="ibar">
               <span class="label">Context Inspector</span>
               <span class="label mono" id="ins-count">—</span>
+              <button class="pill ghost sm" id="ins-focus">Focus</button>
               <button class="iconbtn close" id="ins-close" aria-label="Close inspector">✕</button>
             </div>
             <div class="col">
               <h2 id="ins-title">—</h2>
-              <div class="sub"><span class="dot action"></span><span class="label">Project</span><span class="mono" id="ins-id">—</span></div>
+              <div class="sub">
+                <span class="dot action" id="ins-dot"></span>
+                <span class="label" id="ins-type">—</span>
+                <span class="mono" id="ins-id">—</span>
+              </div>
+              <div class="meta-row mono" id="ins-meta"></div>
+              <p class="ins-body" id="ins-body" hidden></p>
+              <div class="label" id="ins-children-label" hidden>Captured context</div>
               <ol class="ctx-list" id="ctx-list"></ol>
               <div id="ctx-empty" class="empty-ins" hidden>No context captured yet.</div>
             </div>
             <div class="col">
-              <span class="label">Capture</span>
+              <span class="label">Relationships</span>
+              <ul class="rel-list" id="rel-list"></ul>
+              <div id="rel-empty" class="empty-ins" hidden>No relationships.</div>
+
+              <span class="label caphead">Capture</span>
               <form class="cap-form" id="cap-form" autocomplete="off">
+                <div class="captarget mono" id="cap-target">—</div>
                 <label for="note-title">Title <span class="mono" style="color: var(--ink-ghost)">optional if body set</span></label>
                 <input id="note-title" name="title" type="text" maxlength="200" placeholder="Chose token-bucket over sliding-window" />
                 <label for="note-body">Body</label>

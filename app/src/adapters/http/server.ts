@@ -72,7 +72,9 @@ async function serveStatic(res: ServerResponse, urlPath: string): Promise<void> 
         : rel.endsWith('.css')
           ? 'text/css; charset=utf-8'
           : 'application/octet-stream';
-    res.writeHead(200, { 'content-type': type });
+    // Dev server: never cache the shell, so an edited asset is always the one
+    // under test.
+    res.writeHead(200, { 'content-type': type, 'cache-control': 'no-store' });
     res.end(data);
   } catch {
     res.writeHead(404, { 'content-type': 'text/plain' }).end('Not found');

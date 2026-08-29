@@ -100,6 +100,7 @@ const LAYER_BY_TYPE: Record<ObjectType, GraphLayer> = {
 };
 
 const SNIPPET_MAX = 180;
+const ROOT_TITLE = 'Context Core';
 
 function snippet(o: WorkspaceObject): string {
   const source = o.body || '';
@@ -180,7 +181,7 @@ export async function buildContextGraph(
     kind: 'workspace',
     type: 'workspace',
     layer: 'core',
-    title: 'Context Core',
+    title: ROOT_TITLE,
     snippet: 'Workspace root context',
     homeProjectId: null,
     ownerId: null,
@@ -259,6 +260,16 @@ export async function inspectObject(
       edge: toEdge(e),
       direction: outgoing ? 'out' : 'in',
       other: other ? { id: other.id, type: other.type, title: other.title } : null,
+    });
+  }
+
+  // The same structural containment edge the graph draws, so the inspector and
+  // the graph never disagree about one object's edges.
+  if (object.homeProjectId === null) {
+    edges.push({
+      edge: containmentEdge(object.id, scope.workspaceId, object.createdAt),
+      direction: 'out',
+      other: { id: scope.workspaceId, type: 'workspace', title: ROOT_TITLE },
     });
   }
 

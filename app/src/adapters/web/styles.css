@@ -192,8 +192,14 @@ body::before {
 /* ---- centre: the visualization dominates -------------------------- */
 .center { grid-area: center; position: relative; min-width: 0; overflow: hidden; }
 .field-wrap { position: absolute; inset: 0; pointer-events: none; }
-.field-wrap > svg, .field-wrap .inspector, .field-wrap .legend-pill { pointer-events: auto; }
-.field-svg { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
+.field-wrap > svg, .field-wrap .inspector, .field-wrap .legend-pill,
+.field-wrap .gctl { pointer-events: auto; }
+.field-svg {
+  position: absolute; inset: 0; width: 100%; height: 100%; display: block;
+  cursor: grab; touch-action: none; --zoom: 1;
+}
+.field-svg.grabbing { cursor: grabbing; }
+#viewport { will-change: transform; }
 
 .field-readout {
   position: absolute; font: 500 8.5px/1.5 var(--font-mono);
@@ -219,10 +225,11 @@ body::before {
 .field-empty .big { font: 300 15px/1.3 var(--font-ui); color: var(--ink-dim); }
 
 /* ---- SVG field primitives ---------------------------------------- */
-/* only project nodes are interactive; everything else is decorative */
-#fsvg #f-rings, #fsvg #f-mem, #fsvg #f-core, #fsvg #f-edges,
-#fsvg #f-apps, #fsvg #f-rt, #fsvg #f-labels, #fsvg #f-centre,
-#fsvg > rect { pointer-events: none; }
+/* Only real graph nodes are interactive. The orbit scaffold is inert. */
+#fsvg #f-rings, #fsvg #f-mem, #fsvg #f-core, #fsvg #f-apps,
+#fsvg #f-rt, #fsvg #f-labels, #fsvg #g-edges, #fsvg .hexfill { pointer-events: none; }
+#fsvg .off { display: none; }
+
 .hexbg { fill: none; stroke: rgba(255,255,255,0.028); stroke-width: 1; }
 .ring { fill: none; stroke-width: 1; }
 .ring.apps     { stroke: rgba(55,183,255,0.28); }
@@ -238,7 +245,6 @@ body::before {
 .ring-label.memory { fill: rgba(169,124,255,0.85); }
 
 .mem-dot { fill: var(--memory); }
-.core-dot {}                      /* colour set inline */
 .core-link { stroke: rgba(169,124,255,0.10); stroke-width: 0.6; }
 
 .app-badge .hex { fill: rgba(10,12,16,0.85); stroke: rgba(55,183,255,0.5); stroke-width: 1.2; }
@@ -246,27 +252,170 @@ body::before {
 .app-badge.dim { opacity: 0.45; }
 .rt-node { fill: rgba(10,12,16,0.9); stroke: var(--routines); stroke-width: 1.1; }
 
-.edge-line { stroke: rgba(169,124,255,0.16); stroke-width: 1; }
-.edge-line.hot { stroke: rgba(255,122,26,0.5); }
+/* ---- edges: real relationships only ------------------------------ */
+.edge-line { stroke-width: 1; transition: stroke 140ms, opacity 140ms; }
+.edge-line.structural { stroke: rgba(255,255,255,0.10); }
+.edge-line.anchor     { stroke: rgba(169,124,255,0.30); }
+.edge-line.authored   { stroke: rgba(55,183,255,0.38); stroke-dasharray: 4 3; }
+.edge-line.mute       { opacity: 0.22; }
+.edge-line.hot        { stroke: rgba(255,122,26,0.75); stroke-width: 1.6; opacity: 1; }
 
-.pnode { cursor: pointer; }
-.pnode .hit { pointer-events: all; }
-.pnode .disc { fill: rgba(10,12,16,0.92); stroke: rgba(255,122,26,0.55); stroke-width: 1.4; transition: stroke 130ms, fill 130ms; }
-.pnode .lbl  {
-  fill: var(--ink-dim); font: 600 9px/1 var(--font-ui); letter-spacing: 0.06em; text-anchor: middle;
-  paint-order: stroke; stroke: #000; stroke-width: 3px; stroke-linejoin: round;
+/* ---- nodes ------------------------------------------------------- */
+.gnode { cursor: pointer; }
+.gnode .hit { pointer-events: all; }
+.gnode .halo { fill: none; stroke: transparent; stroke-width: 1; }
+.gnode .disc {
+  fill: rgba(10,12,16,0.92); stroke: rgba(255,122,26,0.55); stroke-width: 1.4;
+  transition: stroke 130ms, fill 130ms;
 }
-.pnode:hover .disc, .pnode:focus-visible .disc, .pnode.selected .disc {
+.gnode .dot { fill: var(--memory); stroke: rgba(169,124,255,0.55); stroke-width: 1; opacity: 0.82; transition: opacity 130ms; }
+.gnode[data-accent="apps"] .dot { fill: var(--apps); stroke: rgba(55,183,255,0.6); }
+.gnode[data-accent="routines"] .dot { fill: var(--routines); stroke: rgba(245,181,61,0.6); }
+.gnode .corehex {
+  fill: rgba(255,122,26,0.12); stroke: var(--action); stroke-width: 1.4;
+  filter: drop-shadow(0 0 12px rgba(255,122,26,0.4));
+}
+.gnode .lbl {
+  fill: var(--ink-dim); font-weight: 600; letter-spacing: 0.06em; text-anchor: middle;
+  font-family: var(--font-ui);
+  font-size: calc(9px / var(--zoom, 1));
+  paint-order: stroke; stroke: #000; stroke-width: calc(3px / var(--zoom, 1)); stroke-linejoin: round;
+  pointer-events: none;
+}
+.gnode .lbl.mem {
+  fill: var(--ink-faint); font-size: calc(8px / var(--zoom, 1)); letter-spacing: 0.02em;
+  opacity: 0; transition: opacity 140ms;
+}
+.gnode .count {
+  fill: var(--action); font-family: var(--font-mono); font-size: calc(8px / var(--zoom, 1));
+  letter-spacing: 0.06em; text-anchor: middle; opacity: 0.75; pointer-events: none;
+  paint-order: stroke; stroke: #000; stroke-width: calc(2.5px / var(--zoom, 1));
+}
+.core-label {
+  fill: var(--action); font-family: var(--font-mono); font-weight: 600;
+  font-size: calc(9px / var(--zoom, 1)); letter-spacing: 0.1em; text-anchor: middle;
+  paint-order: stroke; stroke: #000; stroke-width: calc(3px / var(--zoom, 1)); stroke-linejoin: round;
+  pointer-events: none;
+}
+
+/* hover / selection / relationship emphasis */
+/* The graph draws its own focus ring — a halo in the field's language, not a
+   browser outline box around the node's label. */
+#g-nodes .gnode:focus, #g-nodes .gnode:focus-visible { outline: none; }
+#g-nodes .gnode:focus-visible .halo { stroke: var(--apps); stroke-opacity: 0.9; }
+.gnode.hov .disc, .gnode:focus-visible .disc, .gnode.sel .disc {
   fill: rgba(255,122,26,0.16); stroke: var(--action);
   filter: drop-shadow(0 0 9px rgba(255,122,26,0.5));
 }
-.pnode:hover .lbl, .pnode.selected .lbl { fill: var(--ink); }
+.gnode.hov .lbl, .gnode.sel .lbl { fill: var(--ink); }
+.gnode.hov .dot, .gnode.sel .dot { opacity: 1; }
+ /* Only the node under the cursor, the selection and search hits are labelled.
+    Labelling the whole neighbourhood buries the graph in text. */
+.gnode.hov .lbl.mem, .gnode.sel .lbl.mem, .gnode.match .lbl.mem { opacity: 1; }
+.gnode.sel .halo { stroke: rgba(255,122,26,0.55); }
+.gnode.sel .corehex { filter: drop-shadow(0 0 18px rgba(255,122,26,0.75)); }
+.gnode.rel .halo { stroke: rgba(255,122,26,0.28); }
+.gnode.rel .dot { opacity: 1; }
+.gnode.mute { opacity: 0.3; }
+.gnode.mute .lbl { fill: var(--ink-ghost); }
+.gnode.match .halo { stroke: var(--apps); stroke-opacity: 0.85; animation: matchpulse 1.4s ease-out 2; }
+.gnode.match .lbl { fill: var(--apps); }
+.gnode.collapsed .disc { stroke-dasharray: 3 2; }
+.gnode.collapsed .count { opacity: 1; fill: var(--action-2); }
+.gnode.sel .disc, .gnode.sel .dot { animation: selectpop 260ms ease-out 1; }
 
-.corehex { fill: rgba(255,122,26,0.12); stroke: var(--action); stroke-width: 1.4; filter: drop-shadow(0 0 12px rgba(255,122,26,0.4)); }
-.core-label {
-  fill: var(--action); font: 600 9px/1 var(--font-mono); letter-spacing: 0.1em; text-anchor: middle;
-  paint-order: stroke; stroke: #000; stroke-width: 3px; stroke-linejoin: round;
+@keyframes matchpulse {
+  0%   { stroke-opacity: 1; stroke-width: 3; }
+  100% { stroke-opacity: 0.85; stroke-width: 1; }
 }
+@keyframes selectpop {
+  0%   { transform: scale(0.72); }
+  60%  { transform: scale(1.14); }
+  100% { transform: scale(1); }
+}
+
+/* ---- hover readout ------------------------------------------------ */
+.node-tip {
+  position: absolute; top: 0; left: 0; z-index: 12;
+  max-width: 260px; display: flex; flex-direction: column; gap: 2px;
+  background: rgba(4,4,5,0.94); border: 1px solid var(--hair-2);
+  border-left: 2px solid var(--action);
+  padding: 7px 10px; pointer-events: none;
+  box-shadow: 0 8px 26px -12px #000;
+}
+.node-tip .tk {
+  font: 600 8px/1 var(--font-ui); letter-spacing: 0.15em; text-transform: uppercase;
+  color: var(--action);
+}
+.node-tip .tk.memory { color: var(--memory); }
+.node-tip .tk.apps { color: var(--apps); }
+.node-tip .tk.routines { color: var(--routines); }
+.node-tip strong { font: 500 11.5px/1.3 var(--font-ui); color: var(--ink); overflow-wrap: anywhere; }
+.node-tip .tm { font: 500 9px/1.3 var(--font-mono); color: var(--ink-faint); letter-spacing: 0.03em; }
+.node-tip .ts { font: 400 10px/1.4 var(--font-ui); color: var(--ink-dim); margin-top: 2px; }
+
+/* ---- graph control panel (blueprint §14) -------------------------- */
+.gctl {
+  position: absolute; top: 30px; right: 18px; z-index: 11; width: 246px;
+  background: rgba(3,3,4,0.9); border: 1px solid var(--hair-2);
+  backdrop-filter: blur(4px);
+}
+.gctl > header {
+  display: flex; align-items: center; gap: var(--s2);
+  padding: 6px 8px 6px 10px; border-bottom: 1px solid var(--hair-faint);
+}
+.gctl > header .ct { margin-left: auto; font-size: 8.5px; color: var(--ink-ghost); letter-spacing: 0.06em; }
+.gctl .gbody { padding: var(--s2) 10px 10px; display: flex; flex-direction: column; gap: 6px; }
+.gctl.folded .gbody { display: none; }
+.gctl .label { margin-top: 3px; }
+.gctl .srch { display: flex; align-items: center; gap: 6px; border: 1px solid var(--hair-2); padding: 4px 7px; }
+.gctl .srch .ic { color: var(--ink-faint); font-size: 11px; }
+.gctl .srch input {
+  flex: 1; min-width: 0; background: transparent; border: none; outline: none;
+  color: var(--ink); font: 400 10.5px/1.3 var(--font-ui);
+}
+.gctl .srch input::placeholder { color: var(--ink-ghost); }
+.gctl .srch input::-webkit-search-cancel-button { filter: invert(0.6); }
+
+.results { list-style: none; margin: 0; padding: 0; max-height: 152px; overflow-y: auto; scrollbar-width: thin; }
+.results li {
+  display: grid; grid-template-columns: 7px 1fr auto; gap: 6px; align-items: center;
+  padding: 4px 5px; cursor: pointer; border-left: 2px solid transparent;
+}
+.results li:hover { background: rgba(255,255,255,0.04); }
+.results li.cur { border-left-color: var(--action); background: rgba(255,122,26,0.08); }
+.results .sw { width: 6px; height: 6px; border-radius: 50%; background: var(--memory); }
+.results .sw.context { background: var(--action); } .results .sw.core { background: var(--action); }
+.results .sw.apps { background: var(--apps); } .results .sw.routines { background: var(--routines); }
+.results .rt { font: 400 10.5px/1.3 var(--font-ui); color: var(--ink); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.results .rk { font: 600 7.5px/1 var(--font-ui); letter-spacing: 0.1em; text-transform: uppercase; color: var(--ink-ghost); }
+
+.chips { display: flex; flex-wrap: wrap; gap: 4px; }
+.chip {
+  display: inline-flex; align-items: center; gap: 5px;
+  font: 600 8px/1 var(--font-ui); letter-spacing: 0.11em; text-transform: uppercase;
+  color: var(--ink-ghost); background: transparent;
+  border: 1px solid var(--hair); border-radius: 999px; padding: 4px 8px; cursor: pointer;
+  transition: color 120ms, border-color 120ms;
+  flex: none; max-width: 100%;
+}
+.chip .sw { width: 6px; height: 6px; border-radius: 50%; background: currentColor; opacity: 0.5; }
+.chip .n { font-family: var(--font-mono); font-size: 8px; color: var(--ink-ghost); letter-spacing: 0; }
+.chip.on { color: var(--ink-dim); border-color: var(--hair-2); }
+.chip.on .sw { opacity: 1; }
+/* keyed by the semantic accent the graph paints the layer with */
+.chip.on.core .sw, .chip.on.context .sw { background: var(--action); }
+.chip.on.memory .sw { background: var(--memory); }
+.chip.on.routines .sw { background: var(--routines); }
+.chip.on.apps .sw { background: var(--apps); }
+.chip:not(.on) { opacity: 0.55; text-decoration: line-through; }
+.chip.scaffold { border-style: dashed; }
+
+.btnrow { display: flex; align-items: center; gap: 5px; flex-wrap: wrap; }
+.btnrow .pill { padding: 5px 9px; }
+.zoomctl { display: inline-flex; align-items: center; gap: 3px; margin-left: auto; }
+.zoomctl .mono { font-size: 9px; color: var(--ink-faint); min-width: 32px; text-align: center; }
+.zoomctl .iconbtn { width: 20px; height: 20px; border: 1px solid var(--hair); }
 
 /* ---- inspector: slide-up overlay, only on selection ------------- */
 .inspector {
@@ -284,7 +433,8 @@ body::before {
   grid-column: 1 / -1; display: flex; align-items: center; gap: var(--s3);
   padding: 7px var(--s5); border-bottom: 1px solid var(--hair-faint);
 }
-.inspector .ibar .close { margin-left: auto; }
+.inspector .ibar #ins-focus { margin-left: auto; }
+.pill.sm { padding: 4px 9px; font-size: 8px; }
 .inspector .col { padding: var(--s3) var(--s5); overflow-y: auto; overflow-x: hidden; min-width: 0; scrollbar-width: thin; }
 .inspector .col + .col { border-left: 1px solid var(--hair-faint); }
 .inspector h2 { margin: 0 0 2px; font: 400 14px/1.2 var(--font-ui); }
@@ -300,6 +450,38 @@ body::before {
 .ctx-list .edge { display: inline-flex; gap: 5px; align-items: center; color: var(--ink-faint); }
 .ctx-list .edge code { font: 500 8.5px/1 var(--font-mono); color: var(--memory); border: 1px solid var(--hair); border-radius: 2px; padding: 1px 3px; }
 .empty-ins { color: var(--ink-faint); padding: var(--s3) 0; font-size: 11px; }
+
+.meta-row { font-size: 8.5px; letter-spacing: 0.07em; color: var(--ink-ghost); margin-bottom: var(--s2); }
+.ins-body {
+  margin: 0 0 var(--s3); padding-left: 10px; border-left: 2px solid var(--hair-2);
+  color: var(--ink-dim); font-size: 10.5px; line-height: 1.5; white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.ctx-list .ctx-row, .rel-list .rel-row {
+  display: block; width: 100%; text-align: left; background: transparent;
+  border: none; padding: 0; cursor: pointer; font: inherit; color: inherit;
+}
+.ctx-list .ctx-row:hover h3 { color: var(--action); }
+.rel-list { list-style: none; margin: 0 0 var(--s2); padding: 0; display: flex; flex-direction: column; gap: 3px; }
+.rel-list .rel-row {
+  display: grid; grid-template-columns: auto 10px 1fr; gap: 6px; align-items: center;
+  padding: 4px 0; border-top: 1px solid var(--hair-faint);
+}
+.rel-list li:first-child .rel-row { border-top: none; }
+.rel-list .rel-row:hover:not(:disabled) .ot { color: var(--action); }
+.rel-list .rel-row:disabled { cursor: default; opacity: 0.5; }
+.rel-list code {
+  font: 500 8.5px/1 var(--font-mono); color: var(--memory);
+  border: 1px solid var(--hair); border-radius: 2px; padding: 2px 4px;
+}
+.rel-list .ar { color: var(--ink-ghost); font-size: 10px; text-align: center; }
+.rel-list .ot { color: var(--ink); font-size: 10.5px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.rel-list .pv {
+  grid-column: 3; font: 500 8px/1 var(--font-mono); color: var(--ink-ghost);
+  letter-spacing: 0.04em; margin-top: -2px;
+}
+.caphead { display: block; margin-top: var(--s4); }
+.captarget { font-size: 9px; letter-spacing: 0.06em; color: var(--action); margin-top: 4px; }
 
 .cap-form label { display: block; margin: var(--s2) 0 3px; font-size: 10.5px; color: var(--ink-dim); }
 .cap-form input, .cap-form textarea {
@@ -400,7 +582,7 @@ body::before {
 .skill.click:hover { border-color: rgba(255,122,26,0.4); }
 .skill.click:hover .cmd { color: var(--action); }
 
-.routines { width: 100%; border-collapse: collapse; font-size: 10px; }
+table.routines { width: 100%; border-collapse: collapse; font-size: 10px; }
 .routines th { text-align: left; color: var(--ink-ghost); font: 600 8px/1 var(--font-ui); letter-spacing: 0.12em; text-transform: uppercase; padding: 0 0 var(--s2); }
 .routines td { padding: 4px 0; border-top: 1px solid var(--hair-faint); color: var(--ink-dim); vertical-align: middle; }
 .routines td.tm { font-family: var(--font-mono); color: var(--ink-faint); font-size: 9px; width: 44px; }
@@ -430,6 +612,7 @@ body::before {
   body.drawer-right .rail.right { transform: translateX(0); }
   .rail-toggle { display: grid; }
   .brand .sub { display: none; }
+  .gctl { width: 212px; top: 26px; right: 12px; }
 }
 
 @media (max-width: 720px) {
@@ -442,9 +625,18 @@ body::before {
   .principal-select { max-width: 130px; }
   .h-right { gap: 6px; }
   .center { order: 1; overflow: visible; }
-  .field-wrap { position: static; height: 84vw; }
-  .field-svg { position: static; width: 100%; height: 100%; }
-  .field-readout, .legend-pill { display: none; }
+  .field-wrap { position: static; height: auto; }
+  .field-svg { position: static; width: 100%; height: 88vw; }
+  .field-readout, .legend-pill, .node-tip { display: none; }
+  /* Graph controls become an in-flow surface under the graph (blueprint §18). */
+  .gctl {
+    position: static; width: auto; margin: var(--s2) var(--s3) 0;
+    backdrop-filter: none; background: var(--bg-1);
+  }
+  .gctl .gbody { gap: 5px; }
+  .results { max-height: 118px; }
+  .inspector .ibar { padding: 7px var(--s3); }
+  .inspector .col { padding: var(--s3); }
   .rail.right { order: 2; } .rail.left { order: 3; }
   .rail { position: static; transform: none !important; width: auto; box-shadow: none; border: none; border-top: 1px solid var(--hair); }
   .rail-toggle { display: none; }
@@ -456,8 +648,13 @@ body::before {
   .center:not(.inspecting) .inspector { display: none; }
 }
 
+@media (hover: none) {
+  .node-tip { display: none; }
+}
+
 @media (prefers-reduced-motion: reduce) {
   .ring.spin { animation: none; }
+  .gnode.sel .disc, .gnode.sel .dot, .gnode.match .halo { animation: none; }
   * { transition-duration: 1ms !important; }
 }
 @keyframes ringspin { to { transform: rotate(360deg); } }
