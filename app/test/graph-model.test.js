@@ -20,6 +20,8 @@ import {
   zoomAbout,
   clampZoom,
   wedgeSlot,
+  pulseLinkTarget,
+  recentActivity,
 } from '../src/adapters/web/graph-model.js';
 
 const node = (id, type, title, homeProjectId = null, extra = {}) => ({
@@ -192,4 +194,88 @@ test('zoom keeps the point under the cursor fixed, and stays within bounds', () 
   assert.equal(clampZoom(1e6), ZOOM.MAX);
   assert.equal(clampZoom(0), ZOOM.MIN);
   assert.equal(zoomAbout({ k: ZOOM.MAX, tx: 0, ty: 0 }, 4, anchor).k, ZOOM.MAX);
+});
+
+/* ---------------------------------------------------- dashboard (P3.3) --- */
+// Project Pulse's header link and "Context activity" grid are pure
+// projections of the same graph payload the centre panel already holds —
+// these tests are the guarantee that they can never diverge from it, and
+// that every id they hand back is one the graph itself already contains
+// (never a second, competing identity).
+
+test('pulseLinkTarget resolves the same project identity everywhere', () => {
+  const g = fixture();
+  const byId = Object.fromEntries(g.nodes.map((n) => [n.id, n]));
+
+  assert.equal(pulseLinkTarget(null), null, 'nothing selected → no link');
+  assert.equal(pulseLinkTarget(byId.W), null, 'the workspace root is not one project');
+  assert.equal(pulseLinkTarget(byId.P1), 'P1', 'a project links to itself');
+  assert.equal(pulseLinkTarget(byId.N1), 'P1', "a capture links to its home project");
+});
+
+test('recentActivity scopes to the selected project\'s own captures, most recent first', () => {
+  const g = fixture();
+  const byId = Object.fromEntries(g.nodes.map((n) => [n.id, n]));
+  // Mirrors what GET /api/objects/:id returns for a project: its own already
+  // visibility-filtered children, as WorkspaceObject rows (createdAt, body).
+  const detail = {
+    children: [
+      { id: 'N1', title: 'Token bucket', body: '', createdAt: byId.N1.createdAt },
+      { id: 'N2', title: 'Retry budget', body: '', createdAt: byId.N2.createdAt },
+    ],
+  };
+
+  const { items, total } = recentActivity(g, byId.P1, detail);
+  assert.equal(total, 2);
+  assert.deepEqual(items.map((i) => i.id), ['N2', 'N1'], 'most recently captured first');
+  // Every id returned is one the graph already contains — never invented.
+  for (const item of items) assert.ok(g.nodes.some((n) => n.id === item.id));
+});
+
+test('recentActivity falls back to the selected object\'s home-project siblings', () => {
+  const g = fixture();
+  const byId = Object.fromEntries(g.nodes.map((n) => [n.id, n]));
+
+  // Selecting a capture itself (not its project) still scopes to that
+  // capture's project — its siblings — not the whole workspace.
+  const { items, total } = recentActivity(g, byId.N1, /* detail */ null);
+  assert.equal(total, 2, "only P1's own captures");
+  assert.deepEqual(items.map((i) => i.id).sort(), ['N1', 'N2']);
+});
+
+test('recentActivity is global when nothing ties the selection to one project', () => {
+  const g = fixture();
+  const byId = Object.fromEntries(g.nodes.map((n) => [n.id, n]));
+
+  const nothingSelected = recentActivity(g, null, null);
+  assert.equal(nothingSelected.total, 4, 'every capture in the graph');
+
+  const workspaceSelected = recentActivity(g, byId.W, null);
+  assert.equal(workspaceSelected.total, 4, 'the workspace root has no single project either');
+
+  assert.deepEqual(
+    nothingSelected.items.map((i) => i.id),
+    workspaceSelected.items.map((i) => i.id),
+    'the same real objects, the same order, regardless of why nothing is scoped',
+  );
+});
+
+test('recentActivity caps the display list but reports the true total', () => {
+  const nodes = [{ ...fixture().nodes[1] }]; // P1
+  for (let i = 0; i < 25; i++) {
+    nodes.push({
+      id: `many-${i}`,
+      kind: 'object',
+      type: 'note',
+      layer: 'memory',
+      title: `Note ${i}`,
+      snippet: '',
+      homeProjectId: 'P1',
+      createdAt: `2026-02-${String((i % 27) + 1).padStart(2, '0')}T00:00:00.000Z`,
+    });
+  }
+  const g = { nodes, edges: [] };
+  const { items, total } = recentActivity(g, nodes[0], null, 20);
+  assert.equal(total, 25, 'the metric is never truncated');
+  assert.equal(items.length, 20, 'the fixed-size grid is');
 });

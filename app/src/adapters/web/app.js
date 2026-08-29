@@ -7,7 +7,13 @@
 // end to end.
 
 import { createGraphView } from './graph-view.js';
-import { filterChipsFor, searchNodes, metaFor } from './graph-model.js';
+import {
+  filterChipsFor,
+  searchNodes,
+  metaFor,
+  recentActivity,
+  pulseLinkTarget,
+} from './graph-model.js';
 
 const KNOWN_PRINCIPALS = [
   { id: '00000000-0000-4000-8000-0000000000a1', label: 'Alice · owner' },
@@ -305,31 +311,89 @@ function relationshipRow(r, selfId) {
 
 /* ------------------------------------------------------------ left rail -- */
 
+// Project Pulse and its "Context activity" grid are projections of the same
+// graph payload and the same selection the centre panel holds — derived at
+// render time, never a second dataset (P3.3 §2). `recentActivity` and
+// `pulseLinkTarget` are the one place that derivation happens; every id they
+// return already passed through the server's VisibilityPolicy (it came from
+// `state.graph.nodes` or a project's own already-filtered `children`), so
+// feeding one back into `view.revealAndFocus` can never surface an object the
+// current principal could not already see.
 function renderPulse(graph, node = null, detail = null) {
-  const captures = graph.stats?.captures ?? 0;
+  const globalCaptures = graph.stats?.captures ?? 0;
+  const linkId = pulseLinkTarget(node);
+  const { items, total } = recentActivity(graph, node, detail);
+
   if (node && node.type === 'project') {
     $('pulse-name').textContent = node.title.toUpperCase();
-    $('pulse-captures').textContent = String(detail ? detail.children.length : 0);
-    renderActGrid(detail ? detail.children.length : 0);
+    $('pulse-captures').textContent = String(total);
   } else if (node) {
     $('pulse-name').textContent = (node.title || 'CONTEXT CORE').toUpperCase();
-    $('pulse-captures').textContent = String(captures);
-    renderActGrid(captures);
+    $('pulse-captures').textContent = String(linkId ? total : globalCaptures);
   } else {
     const n = graph.stats?.projects ?? 0;
     $('pulse-name').textContent = n
       ? `${n} PROJECT${n === 1 ? '' : 'S'} IN VIEW`
       : 'No project selected';
-    $('pulse-captures').textContent = String(captures);
-    renderActGrid(captures);
+    $('pulse-captures').textContent = String(globalCaptures);
+  }
+
+  // Only make the header clickable when that project is actually a node the
+  // current principal can see right now — a note can, in principle, remain
+  // visible by ownership after its project stops being shared; the click
+  // target must never be offered for an id the graph cannot resolve.
+  const validLinkId =
+    linkId && graph.nodes.some((n) => n.id === linkId && n.type === 'project') ? linkId : null;
+  setPulseLink(validLinkId);
+  renderActGrid(items);
+}
+
+/** Project Pulse → Graph: its header links back to the real project node the
+ *  current selection belongs to, so it can re-focus the graph on it. */
+function setPulseLink(projectId) {
+  const el = $('pulse-name');
+  if (projectId) {
+    el.dataset.projectId = projectId;
+    el.classList.add('linked');
+    el.setAttribute('role', 'button');
+    el.setAttribute('tabindex', '0');
+    el.setAttribute('aria-label', `Focus ${el.textContent} in the graph`);
+  } else {
+    delete el.dataset.projectId;
+    el.classList.remove('linked');
+    el.removeAttribute('role');
+    el.removeAttribute('tabindex');
+    el.removeAttribute('aria-label');
   }
 }
-function renderActGrid(count) {
+
+/** Developer Activity → Context: each lit dot is one real captured object;
+ *  clicking or activating it selects and focuses that same object in the
+ *  graph, through the one selection path every other surface uses. */
+function renderActGrid(items) {
   const g = $('actgrid');
   g.textContent = '';
   for (let i = 0; i < 20; i++) {
+    const item = items[i];
     const c = document.createElement('i');
-    if (i < Math.min(count, 20)) c.className = 'on';
+    if (item) {
+      c.className = 'on';
+      c.dataset.id = item.id;
+      c.title = item.title;
+      c.setAttribute('role', 'button');
+      c.setAttribute('tabindex', '0');
+      c.setAttribute('aria-label', `Open ${item.title} in the graph`);
+      const go = () => view.revealAndFocus(item.id);
+      c.addEventListener('click', go);
+      c.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter' || e.key === ' ') {
+          e.preventDefault();
+          go();
+        }
+      });
+    } else {
+      c.setAttribute('aria-hidden', 'true');
+    }
     g.append(c);
   }
 }
@@ -432,6 +496,22 @@ function wireGraphControls() {
     $('gctl-toggle').setAttribute('aria-expanded', String(open));
     $('gctl-toggle').textContent = open ? '▾' : '▸';
   };
+
+  // Project Pulse → Graph: re-focus the same project the header names.
+  // `setPulseLink` only ever puts a real, already-visible project id on
+  // `dataset.projectId`, so this is the same revealAndFocus path everything
+  // else uses, not a second navigation mechanism.
+  const pulseGo = () => {
+    const id = $('pulse-name').dataset.projectId;
+    if (id) view.revealAndFocus(id);
+  };
+  $('pulse-name').addEventListener('click', pulseGo);
+  $('pulse-name').addEventListener('keydown', (e) => {
+    if ((e.key === 'Enter' || e.key === ' ') && $('pulse-name').dataset.projectId) {
+      e.preventDefault();
+      pulseGo();
+    }
+  });
 }
 
 function wirePrincipal() {

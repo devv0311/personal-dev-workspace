@@ -99,6 +99,13 @@
           </ul>
         </section>
 
+        <!-- P3.3: mixed REAL/PREVIEW, unchanged from P3.1/P3.2 convention —
+             the section stays tagged Preview because Open tasks/Blocked have
+             no backing domain data (classification C: no task entity exists
+             yet), but the parts that DO have real data carry the .real class
+             (Captures) or are now interactive (the header link, the activity
+             grid) — the same project/object identity the graph and inspector
+             use, never a duplicate. See app.js renderPulse/renderActGrid. -->
         <section class="sect" aria-labelledby="s-pulse">
           <header>
             <span class="glyph" aria-hidden="true">◭</span><span class="label" id="s-pulse">Project Pulse</span>
@@ -111,7 +118,7 @@
             <span class="pm"><span class="n" id="pulse-blocked">3</span><span class="l label">Blocked</span></span>
           </div>
           <div class="label" style="margin-top: var(--s4)">Context activity</div>
-          <div class="actgrid" id="actgrid" aria-hidden="true"></div>
+          <div class="actgrid" id="actgrid" role="list" aria-label="Recent captured context — activates the same object in the graph"></div>
         </section>
       </aside>
 
@@ -238,6 +245,12 @@
 
       <!-- ===== RIGHT RAIL ===== -->
       <aside class="rail right" aria-label="Right intelligence rail">
+        <!-- P3.3: classified C — legitimately unavailable. Every row here
+             would need a backend capability this milestone does not build
+             (GitHub activity, decision-conflict detection, task tracking),
+             so none resolves to a real persisted object and none is wired
+             to selection. Left as static, clearly PREVIEW-tagged content
+             rather than fabricating a linkage to real data. -->
         <section class="sect" aria-labelledby="s-attn">
           <header>
             <span class="glyph" aria-hidden="true">✉</span><span class="label" id="s-attn">Attention</span>
@@ -246,7 +259,7 @@
           <div class="attn-count"><span class="metric" id="attn-n">12</span><span class="label">Items need review</span></div>
           <div class="attn-row">
             <span class="ic pr" aria-hidden="true">⚡</span>
-            <span><span class="t">PR #184 — authentication</span><br /><span class="m">context-engine · needs review</span></span>
+            <span><span class="t">PR #184 — authentication</span><br /><span class="m">auth-service · needs review</span></span>
             <span class="tm">18m</span>
           </div>
           <div class="attn-row">
@@ -256,7 +269,7 @@
           </div>
           <div class="attn-row">
             <span class="ic bl" aria-hidden="true">◆</span>
-            <span><span class="t">3 tasks blocked</span><br /><span class="m">api-gateway-rework</span></span>
+            <span><span class="t">3 tasks blocked</span><br /><span class="m">payment-service</span></span>
             <span class="tm">4h</span>
           </div>
           <div class="label" style="margin-top: var(--s3)">Today's mix</div>

@@ -277,6 +277,64 @@ export function searchNodes(graph, query, limit = 8) {
   return hits.slice(0, limit).map((h) => h.node);
 }
 
+/* ---------------------------------------------------------- dashboard (P3.3) */
+//
+// The dashboard rails (Project Pulse's "Context activity", the pulse header)
+// are projections of the SAME graph payload and the SAME selection the centre
+// panel already holds — never a second dataset. These two pure functions are
+// the single place that derivation happens, so every rail widget reads it the
+// same way the graph does, and a click handler that feeds an id back into
+// revealAndFocus() can never resolve to an object the caller could not
+// already see: every id returned here was already present in `graph.nodes`
+// (whole-graph payload) or in a project's own already-visibility-filtered
+// `children` (P3.2's inspectObject) — both scoped by the same VisibilityPolicy.
+
+/**
+ * The real project a dashboard element's identity is currently tied to, or
+ * null when the current selection isn't scoped to one project (nothing
+ * selected, or the workspace root). Used to link Project Pulse's header back
+ * to the same node the graph and inspector are showing.
+ */
+export function pulseLinkTarget(node) {
+  if (!node) return null;
+  if (node.type === 'project') return node.id;
+  return node.homeProjectId ?? null;
+}
+
+/**
+ * "Developer Activity" / Project Pulse's context-activity feed: the most
+ * recently captured real objects relevant to the current selection, most
+ * recent first.
+ *
+ *   • a Project selected      → that project's own captures (`detail.children`,
+ *                                already visibility-filtered by inspectObject)
+ *   • another object selected → its home project's siblings, if it has one
+ *   • nothing selected, or no home project → every capture visible in the
+ *     graph (global recent activity)
+ *
+ * Returns `{ items, total }`: `items` is capped to `limit` for the fixed-size
+ * dot grid; `total` is the full, uncapped count for the numeric metric next
+ * to it, so a project with more captures than the grid can show still reports
+ * its true count.
+ */
+export function recentActivity(graph, node = null, detail = null, limit = 20) {
+  let pool;
+  if (node && node.type === 'project' && detail) {
+    pool = detail.children.map((c) => ({
+      id: c.id,
+      title: c.title || c.body || '(untitled)',
+      createdAt: c.createdAt,
+    }));
+  } else {
+    const projectId = pulseLinkTarget(node);
+    pool = (graph.nodes ?? [])
+      .filter((n) => n.layer === 'memory' && (projectId ? n.homeProjectId === projectId : true))
+      .map((n) => ({ id: n.id, title: n.title || n.snippet || '(untitled)', createdAt: n.createdAt }));
+  }
+  const sorted = pool.slice().sort((a, b) => String(b.createdAt).localeCompare(String(a.createdAt)));
+  return { items: sorted.slice(0, limit), total: sorted.length };
+}
+
 /* ------------------------------------------------------------------ focus -- */
 
 export const clampZoom = (k) => Math.min(ZOOM.MAX, Math.max(ZOOM.MIN, k));

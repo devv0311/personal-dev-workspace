@@ -248,6 +248,104 @@ traverse, focus, and capture into a real project.
 Verified at 2048 / 1600 / 1140 / 390 with no horizontal overflow and a clean
 console. Evidence: `docs/screenshots/p3.2/`.
 
+## Dashboard ↔ graph integration (P3.3)
+
+P3.1/P3.2 gave the command center a real interactive graph; the surrounding
+rail widgets still read from a mix of real data and representative preview
+content, computed independently of each other. P3.3 does not add a widget or
+touch the visual system — it makes the existing widgets **projections of the
+one object the graph and inspector already hold**, so a piece of context
+encountered anywhere in the shell leads to the same underlying object
+everywhere else.
+
+**No backend or API change was needed.** Every cross-surface interaction is
+built entirely from the `/api/graph` and `/api/objects/:id` payloads the
+client already fetches — both already scoped by the same `VisibilityPolicy`
+as everything else. Reusing them, rather than adding a widget-specific
+endpoint, is what keeps the authorization boundary singular: a rail widget
+can only ever reference an id the server already decided this principal may
+see.
+
+**The shared derivation.** `graph-model.js` (already pure, DOM-free, and
+shipped verbatim to the browser) gained two functions:
+- `pulseLinkTarget(node)` — the real project id the current selection belongs
+  to: itself, if a project is selected; its `homeProjectId`, if a capture is;
+  `null` otherwise. One function, used everywhere a widget needs to know
+  "which project is this."
+- `recentActivity(graph, node, detail)` — the real captured objects relevant
+  to that scope, most recent first: a project's own children when a project
+  is selected, its home project's siblings when one of its captures is, and
+  every capture in the graph when nothing ties the selection to one project.
+  Returns `{ items, total }` — `items` capped for the fixed-size dot grid,
+  `total` uncapped for the numeric metric, so a project with more captures
+  than the grid can show still reports its true count.
+
+Every id either function returns was already present in `state.graph.nodes`
+(the whole-graph payload) or in a project's own already-filtered `children`
+(P3.2's `inspectObject`) — so feeding one back into `view.revealAndFocus()`
+can never resolve to an object the caller could not already see, and there is
+no second, competing place that "knows" what a project or a capture is.
+
+**What became interactive, using that derivation:**
+- **Project Pulse's header** now links back to the real project the current
+  selection belongs to (an orange hover state signals it, matching the
+  existing interactive-element language). Clicking it re-focuses the graph on
+  that same project — useful after panning or zooming away — without
+  re-deriving or re-fetching anything; it calls the same `revealAndFocus`
+  every other surface uses.
+- **Project Pulse's "Context activity" dot grid** — previously a plain count
+  of anonymous filled circles — now has one real captured object behind each
+  lit dot (title on hover, `Enter`/click opens it in the graph). This is the
+  blueprint's "Developer Activity" concept (§10.2), realised through the
+  widget that already existed rather than a new one: the accepted visual
+  language (a dot grid) is unchanged, the dots just stopped being anonymous.
+- **The metric shown for "Captures"** now reflects the scope implied by the
+  selection (a project's own total, or its parent's, or the workspace's)
+  instead of always the global count.
+
+**What deliberately did not change — classification.** Per the requirement
+that preview content not be removed just to look more finished:
+- **Attention** (right rail) stays static preview, unlinked, with its
+  `PREVIEW` tag unchanged. None of its three rows correspond to a real
+  persisted object — GitHub activity, decision-conflict detection and task
+  tracking are all future-milestone capabilities this slice does not build
+  (classification **C**, §6/§18) — so none was wired to selection, per
+  "an attention item must have an identifiable underlying object when it
+  claims to represent one." Two of its static example strings (`api-gateway-
+  rework`, `context-engine`) coincidentally matched real seeded project
+  titles from an unrelated principal; renamed to non-colliding placeholders
+  (`payment-service`, `auth-service` — the first is the blueprint's own
+  example) so a screenshot of this preview content can never be misread as a
+  cross-principal leak.
+- **Session's "What's next"** stays static preview — there is no calendar or
+  task backend to derive it from (classification C); unchanged.
+- **Project Pulse's "Open tasks" / "Blocked"** stay hardcoded — no `task`
+  domain object is ever created by any capture path yet, so there is nothing
+  real to compute them from (classification C); the section keeps its
+  `PREVIEW` tag for exactly this reason, alongside the parts of it that are
+  now real or interactive.
+- **Search** already resolved graph node identity in P3.2
+  (`searchNodes(state.graph, …)` → `view.revealAndFocus(id)`); P3.3 added no
+  second index and no semantic capability, only confirmed the reuse.
+
+**Verified:** `tsc --noEmit` clean; **51/51 tests** (46 from P2.7/P3.2
+unchanged, 5 new — `pulseLinkTarget`/`recentActivity` unit tests covering
+project scope, home-project fallback, the global case, and that the display
+cap never distorts the reported total). Cross-surface browser verification:
+Project Pulse → Graph (select a project, pan/zoom away, click the Pulse
+header, confirm the transform actually changed and the inspector still names
+the same project); Graph → Dashboard (select a capture, confirm Pulse relinks
+to its *home* project, not the capture itself); Developer Activity → Context
+(click a real activity dot, confirm the inspector opens that exact object);
+Capture → Connect (capture a note, confirm Pulse's count and the activity
+grid both gain a dot, and that dot resolves to the new object); Bob
+(identical flows — his Pulse links only to his one shared project, his
+activity dots are only his three captures, no Alice title appears in the
+dashboard DOM, and a direct API probe for one of her objects still 404s).
+Rendered at 2048 / 1600 / 1140 / 390 with no overflow; visual composition is
+byte-for-byte the same as P3.2 except the two renamed preview strings.
+Evidence: `docs/screenshots/p3.3/`.
+
 ## Deferred (documented, not built here)
 
 Per P2.7 §15 / §16 — belongs to later milestones, not this slice:
