@@ -3,77 +3,303 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>Personal Developer Workspace</title>
+    <title>Developer Command Center — Personal Developer Workspace</title>
+    <link
+      rel="icon"
+      href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Crect width='24' height='24' fill='%23060607'/%3E%3Cpath d='M12 3 4 7.5v9L12 21l8-4.5v-9L12 3Z' fill='none' stroke='%23ff7a33' stroke-width='1.5'/%3E%3Ccircle cx='12' cy='12' r='3' fill='%23ff7a33'/%3E%3C/svg%3E"
+    />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;650&family=JetBrains+Mono:wght@400;500;600&display=swap"
+      rel="stylesheet"
+    />
     <link rel="stylesheet" href="/styles.css" />
   </head>
   <body>
-    <a class="skip-link" href="#main">Skip to content</a>
-    <header class="app-bar">
-      <div class="brand">
-        <span class="brand-mark" aria-hidden="true">◆</span>
-        <span>Personal Developer Workspace</span>
-      </div>
-      <div class="who">
-        <label for="principal">Acting as</label>
-        <select id="principal" aria-label="Development principal">
-          <option value="">Loading…</option>
-        </select>
-        <span class="dev-flag" title="Development-only authentication boundary">dev auth</span>
-      </div>
-    </header>
+    <a class="skip-link" href="#center">Skip to context field</a>
 
-    <div class="layout">
-      <nav class="sidebar" aria-label="Projects">
-        <h2>Projects</h2>
-        <ul id="project-list" class="project-list">
-          <li class="muted">Loading…</li>
-        </ul>
-      </nav>
+    <div class="shell">
+      <!-- 8. TOP HEADER -->
+      <header class="header">
+        <div class="brand">
+          <svg class="mark" viewBox="0 0 24 24" aria-hidden="true">
+            <path
+              d="M12 2 3 7v10l9 5 9-5V7l-9-5Z"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="1.5"
+            />
+            <circle cx="12" cy="12" r="3.2" fill="currentColor" />
+          </svg>
+          <span class="name">DEVWORKSPACE</span>
+          <span class="ctx">
+            <span class="label">Workspace</span>
+            <span class="who" id="ctx-workspace">—</span>
+          </span>
+        </div>
 
-      <main id="main" class="content">
-        <section id="project-view" hidden>
-          <div class="project-head">
-            <h1 id="project-title"></h1>
-            <p class="project-meta">
-              <span id="project-owner"></span>
-              <span aria-hidden="true">·</span>
-              <span id="capture-count"></span>
-            </p>
-            <p class="tagline">This project remembers what you captured.</p>
+        <div class="center-tools">
+          <button class="iconbtn rail-toggle" id="toggle-left" aria-label="Toggle left rail">☰</button>
+          <div class="search-trigger" role="button" tabindex="0" aria-label="Search context (not yet active)">
+            <span aria-hidden="true">⌕</span>
+            <span>Search context…</span>
+            <span class="kbd">/</span>
+          </div>
+          <button class="btn" id="cmd-palette" aria-label="Command palette (not yet active)">
+            <span class="mono">⌘K</span>
+          </button>
+          <div class="seg" role="group" aria-label="View mode">
+            <button class="btn" id="view-grid" aria-pressed="true">GRID</button>
+            <button class="btn" id="view-graph" aria-pressed="false" aria-label="Graph mode (preview)">GRAPH</button>
+          </div>
+          <button class="iconbtn rail-toggle" id="toggle-right" aria-label="Toggle right rail">☰</button>
+        </div>
+
+        <div class="right-tools">
+          <div class="status-cluster" aria-label="System status">
+            <span class="dot ok" title="Core online"></span>
+            <span class="dot routines" title="Worker active"></span>
+            <span class="dot idle" title="No alerts"></span>
+          </div>
+          <button class="iconbtn" id="notif" aria-label="Notifications (not yet active)">◔</button>
+          <select class="principal-select" id="principal" aria-label="Development principal">
+            <option value="">…</option>
+          </select>
+          <span class="dev-flag" title="Development-only authentication boundary (P2.7)">DEV</span>
+        </div>
+      </header>
+
+      <!-- 10. LEFT INTELLIGENCE RAIL -->
+      <aside class="rail left" aria-label="Left intelligence rail">
+        <section class="panel" aria-labelledby="micro-tools-h">
+          <header>
+            <span class="label" id="micro-tools-h">Micro Tools</span>
+          </header>
+          <div class="body">
+            <div class="tool-row clickable" id="tool-capture" role="button" tabindex="0">
+              <span class="ico" aria-hidden="true">⌘</span>
+              <span class="meta"><span class="t">Capture</span><br /><span class="d">Save context instantly</span></span>
+              <span class="act" aria-hidden="true">→</span>
+            </div>
+            <div class="tool-row apps offline">
+              <span class="ico" aria-hidden="true">◈</span>
+              <span class="meta"><span class="t">GitHub</span><br /><span class="d">Repository activity</span></span>
+              <span class="tag offline">Offline</span>
+            </div>
+            <div class="tool-row apps offline">
+              <span class="ico" aria-hidden="true">▣</span>
+              <span class="meta"><span class="t">Terminal</span><br /><span class="d">Recent commands</span></span>
+              <span class="tag offline">Offline</span>
+            </div>
+            <div class="tool-row apps offline">
+              <span class="ico" aria-hidden="true">◇</span>
+              <span class="meta"><span class="t">Docs</span><br /><span class="d">Project documentation</span></span>
+              <span class="tag offline">Offline</span>
+            </div>
+            <div class="add-row">＋ Add tool</div>
+          </div>
+        </section>
+
+        <section class="panel" aria-labelledby="today-h">
+          <header>
+            <span class="label" id="today-h">Developer Activity</span>
+            <span class="tag preview">Preview</span>
+          </header>
+          <div class="body">
+            <div class="today-clock">
+              <span class="time" id="clock">--:--</span>
+              <span class="zone" id="clock-zone">LOCAL</span>
+            </div>
+            <div class="kv"><span class="k">PROJECT</span><span class="v" id="today-project">—</span></div>
+            <div class="kv"><span class="k">SESSION</span><span class="v" id="today-session">idle</span></div>
+            <div class="label" style="margin-top: var(--s3)">Today</div>
+            <ul class="timeline">
+              <li><span class="tm">09:42</span><span class="ev">auth refactor — session start</span></li>
+              <li><span class="tm">11:16</span><span class="ev">reviewed PR #184</span></li>
+              <li><span class="tm">13:02</span><span class="ev">database persistence decision</span></li>
+              <li><span class="tm" id="last-capture-time">15:41</span><span class="ev">captured note</span></li>
+            </ul>
+            <div class="label" style="margin-top: var(--s3)">What's next</div>
+            <div class="whatsnext">
+              <span class="n">Review authentication PR</span>
+              <span class="n">Resolve database migration task</span>
+            </div>
+          </div>
+        </section>
+
+        <section class="panel" aria-labelledby="pulse-h">
+          <header>
+            <span class="label" id="pulse-h">Project Pulse</span>
+            <span class="tag preview" id="pulse-preview-tag">Preview</span>
+          </header>
+          <div class="body">
+            <div class="pulse-name" id="pulse-name">NO PROJECT SELECTED</div>
+            <div class="pulse-grid">
+              <div class="pulse-cell">
+                <div class="metric real" id="pulse-captures">0</div>
+                <div class="label">Captures</div>
+              </div>
+              <div class="pulse-cell">
+                <div class="metric" id="pulse-open">7</div>
+                <div class="label">Open tasks</div>
+              </div>
+              <div class="pulse-cell">
+                <div class="metric" id="pulse-blocked">3</div>
+                <div class="label">Blocked</div>
+              </div>
+            </div>
+            <div class="label" style="margin-top: var(--s4)">Context activity</div>
+            <div class="activity-grid" id="activity-grid" aria-hidden="true"></div>
+          </div>
+        </section>
+      </aside>
+
+      <!-- 5 / 9. CENTRAL CONTEXT FIELD -->
+      <main class="center" id="center">
+        <div class="center-head">
+          <span class="label">Context Field</span>
+          <span class="label" id="field-count">0 nodes</span>
+        </div>
+
+        <div class="field-wrap">
+          <svg
+            class="field-svg"
+            id="field-svg"
+            viewBox="0 0 1000 1000"
+            role="img"
+            aria-label="Context field — orbital view of projects. Static shell; the interactive graph arrives in a later milestone."
+          >
+            <g id="field-rings"></g>
+            <g id="field-core"></g>
+            <g id="field-radials"></g>
+            <g id="field-nodes"></g>
+          </svg>
+          <div class="field-empty" id="field-empty" hidden>
+            <span class="big">No context nodes</span>
+            <span>Capture something into a project to populate the field.</span>
+          </div>
+        </div>
+
+        <!-- 15. CONTEXT INSPECTOR + CAPTURE (real P2.7 data) -->
+        <div class="inspector">
+          <div class="insp-bar">
+            <span class="label">Context Inspector</span>
+            <span class="label mono" id="insp-bar-count">—</span>
+          </div>
+          <div class="col">
+            <div id="inspector-empty" class="empty-inspector">
+              Select a context node to inspect its captured context.
+            </div>
+            <div id="inspector-body" hidden>
+              <h2 id="insp-title">—</h2>
+              <div class="sub">
+                <span class="dot memory"></span>
+                <span class="label">Project</span>
+                <span class="mono" id="insp-id">—</span>
+                <span class="mono" id="insp-count">—</span>
+              </div>
+              <ol class="context-list" id="context-list"></ol>
+              <div id="context-empty" class="empty-inspector" hidden>
+                No context captured yet.
+              </div>
+            </div>
           </div>
 
-          <form id="capture-form" class="capture" autocomplete="off">
-            <h2>Capture a note</h2>
-            <label for="note-title">Title <span class="opt">(optional if body is set)</span></label>
-            <input id="note-title" name="title" type="text" maxlength="200"
-                   placeholder="e.g. Chose token-bucket over sliding-window" />
-            <label for="note-body">Body</label>
-            <textarea id="note-body" name="body" rows="3"
-                      placeholder="What did you decide, and why?"></textarea>
-            <div class="capture-actions">
-              <button type="submit" id="capture-submit">Capture into project</button>
-              <span id="capture-status" role="status" aria-live="polite"></span>
-            </div>
-          </form>
-
-          <section aria-labelledby="context-h">
-            <h2 id="context-h">Captured context</h2>
-            <div id="context-empty" class="empty" hidden>
-              Nothing captured yet. Add the first note above — it will persist and
-              reappear after a restart.
-            </div>
-            <ol id="context-list" class="context-list"></ol>
-          </section>
-        </section>
-
-        <section id="placeholder" class="empty large">
-          <p>Select a project to view and capture its context.</p>
-        </section>
-
-        <section id="error-view" class="error" hidden role="alert">
-          <p id="error-message"></p>
-        </section>
+          <div class="col">
+            <span class="label">Capture</span>
+            <form class="capture-form" id="capture-form" autocomplete="off">
+              <label for="note-title">Title <span class="mono" style="color: var(--ink-ghost)">optional if body set</span></label>
+              <input id="note-title" name="title" type="text" maxlength="200"
+                     placeholder="Chose token-bucket over sliding-window" />
+              <label for="note-body">Body</label>
+              <textarea id="note-body" name="body" rows="3"
+                        placeholder="What did you decide, and why?"></textarea>
+              <div class="capture-actions">
+                <button type="submit" class="btn primary" id="capture-submit" disabled>Capture into project</button>
+                <span id="capture-status" role="status" aria-live="polite">Select a project first.</span>
+              </div>
+            </form>
+          </div>
+        </div>
       </main>
+
+      <!-- 11. RIGHT INTELLIGENCE RAIL -->
+      <aside class="rail right" aria-label="Right intelligence rail">
+        <section class="panel" aria-labelledby="attention-h">
+          <header>
+            <span class="label" id="attention-h">Attention</span>
+            <span class="tag preview">Preview</span>
+          </header>
+          <div class="body">
+            <div class="attention-count">
+              <span class="metric">12</span>
+              <span class="label">Items need review</span>
+            </div>
+            <div class="attn-row">
+              <span class="ico pr" aria-hidden="true">⚡</span>
+              <span><span class="t">PR #184 — authentication</span><br /><span class="m">18m ago</span></span>
+            </div>
+            <div class="attn-row">
+              <span class="ico conflict" aria-hidden="true">◉</span>
+              <span><span class="t">Decision conflict detected</span><br /><span class="m">database architecture</span></span>
+            </div>
+            <div class="attn-row">
+              <span class="ico blocked" aria-hidden="true">◆</span>
+              <span><span class="t">3 tasks blocked</span><br /><span class="m">payment-service</span></span>
+            </div>
+            <div class="label" style="margin-top: var(--s4)">Today's mix</div>
+            <div class="mixbar" aria-hidden="true"><span></span><span></span><span></span><span></span></div>
+            <div class="mix-legend"><span>Tasks</span><span>Context</span><span>Apps</span><span>System</span></div>
+          </div>
+        </section>
+
+        <section class="panel" aria-labelledby="skills-h">
+          <header>
+            <span class="label" id="skills-h">Skills Deck</span>
+            <span class="tag preview">Preview</span>
+          </header>
+          <div class="body">
+            <div class="skills-deck">
+              <div class="skill-card">
+                <span class="cmd">/summarize</span><span class="spec">OPUS · HIGH</span>
+                <span class="run" aria-hidden="true">▶ ○</span>
+              </div>
+              <div class="skill-card">
+                <span class="cmd">/plan</span><span class="spec">SONNET · HIGH</span>
+                <span class="run" aria-hidden="true">▶ ○</span>
+              </div>
+              <div class="skill-card clickable" id="skill-capture" role="button" tabindex="0">
+                <span class="cmd">/capture</span><span class="spec">SONNET · MED</span>
+                <span class="run" aria-hidden="true">▶ ○</span>
+              </div>
+              <div class="skill-card">
+                <span class="cmd">/handoff</span><span class="spec">OPUS · HIGH</span>
+                <span class="run" aria-hidden="true">▶ ○</span>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <section class="panel" aria-labelledby="routines-h">
+          <header>
+            <span class="label" id="routines-h">Routines</span>
+            <span class="tag preview">Preview</span>
+          </header>
+          <div class="body">
+            <table class="routines-table">
+              <thead><tr><th>Time</th><th>Routine</th><th>Status</th></tr></thead>
+              <tbody>
+                <tr><td class="tm">09:00</td><td>context-index</td><td><span class="st fired">✓ Fired</span></td></tr>
+                <tr><td class="tm">11:30</td><td>github-sync</td><td><span class="st fired">✓ Fired</span></td></tr>
+                <tr class="next"><td class="tm">14:00</td><td>project-summary</td><td><span class="st next">● Next</span></td></tr>
+                <tr><td class="tm">16:30</td><td>stale-task-check</td><td><span class="st queued">Queued</span></td></tr>
+                <tr><td class="tm">18:00</td><td>daily-recap</td><td><span class="st queued">Queued</span></td></tr>
+              </tbody>
+            </table>
+          </div>
+        </section>
+      </aside>
     </div>
 
     <script type="module" src="/app.js"></script>

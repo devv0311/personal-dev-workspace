@@ -87,6 +87,36 @@ src/adapters/
 src/worker/        outbox drain + fts-maintenance consumer.
 ```
 
+## Visual shell (P3.1 — static)
+
+`src/adapters/web/` is the dark HUD **developer command center** described in
+`Design_Dashboard_Aesthetic_Claude_Blueprint.md` (the authoritative visual spec):
+
+- Near-black canvas, thin structural borders, semantic accent system
+  (orange action · cyan apps · purple memory · amber routines · red blocker),
+  three-level glow, technical/HUD typography, uppercase tracked labels.
+- Three-column composition — left rail 24% (Micro Tools, Developer Activity,
+  Project Pulse) · centre 52% (Context Field + Context Inspector) · right rail
+  24% (Attention, Skills Deck, Routines).
+- Central **Context Field** is a **static SVG** — orbital rings, a static
+  particle core with a few network links, and one node per real project.
+  No graph engine, no Three.js, no physics (those are a later milestone).
+  Selecting a node loads that project's real captured context and enables
+  the real capture form.
+- Responsive: desktop command centre → laptop rails become overlay drawers
+  (☰ in the header, Esc closes) → mobile sequential stack.
+
+**P3.1 decisions (small, documented):**
+- Fonts loaded from Google Fonts (Inter + JetBrains Mono) with full system
+  fallback stacks — degrades cleanly offline. Single `<link>`, no build step.
+- One ambient effect: a ~220s primary-ring rotation, disabled under
+  `prefers-reduced-motion`. No other continuous motion.
+- Preview widgets (Developer Activity timeline, Project Pulse task counts,
+  Attention, Skills Deck, Routines) use representative developer content and
+  carry a `PREVIEW` tag; offline tools show `OFFLINE`. Real values: the clock,
+  the selected project name, and the capture count / activity dots.
+- Mobile section order: field + capture → Attention rail → tools/pulse rail.
+
 ## Deferred (documented, not built here)
 
 Per P2.7 §15 / §16 — belongs to later milestones, not this slice:
