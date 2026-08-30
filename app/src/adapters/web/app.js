@@ -20,8 +20,12 @@ const KNOWN_PRINCIPALS = [
   { id: '00000000-0000-4000-8000-0000000000b0', label: 'Bob · no access' },
 ];
 
+/** The assistant service (Zone B). Separate origin: it holds no DB credential. */
+const ASSISTANT_URL = localStorage.getItem('dc.assistantUrl') || 'http://localhost:4178';
+
 const state = {
   principalId: localStorage.getItem('dc.principalId') || KNOWN_PRINCIPALS[0].id,
+  ask: { busy: false, result: null },
   graph: { nodes: [], edges: [], stats: { projects: 0, captures: 0 } },
   selected: null, // { node, detail }
   results: [],
@@ -151,6 +155,7 @@ const fmtDate = (iso) => {
 
 function closeInspector() {
   state.selected = null;
+  if (!$('askp').hidden) $('ask-scope').textContent = 'Whole workspace';
   $('center').classList.remove('inspecting');
   $('cap-submit').disabled = true;
   $('cap-target').textContent = 'Select a project to capture into.';
@@ -183,6 +188,8 @@ async function openInspector(node) {
   $('ctx-empty').hidden = true;
   $('rel-empty').hidden = true;
   $('ins-children-label').hidden = true;
+
+  if (!$('askp').hidden) $('ask-scope').textContent = `Scoped to: ${node.title || '(untitled)'}`;
 
   const target = captureTarget(node);
   $('cap-target').textContent = target ? `→ ${target.title}` : 'Capture needs a project.';
@@ -476,6 +483,248 @@ function wireSearch() {
   };
 }
 
+/* --------------------------------------------------------- assistant (P3.4) */
+//
+// The panel is a view over the assistant's response. It renders NOTHING the
+// pipeline did not validate: every evidence row is a real object id that the
+// core confirmed this principal can see, so clicking one is the same
+// revealAndFocus every other surface uses — the answer navigates back into the
+// graph rather than being a dead end.
+
+function askScopeLabel() {
+  const node = state.selected?.node;
+  if (!node) return 'Whole workspace';
+  return `Scoped to: ${node.title || '(untitled)'}`;
+}
+
+function setAskStatus(text, cls = '') {
+  const el = $('ask-status');
+  el.textContent = text;
+  el.className = cls;
+}
+
+function openAsk() {
+  // Opened from the left rail, which is a DRAWER at <=1200px — leaving it up
+  // would cover the panel the user just asked for.
+  document.body.classList.remove('drawer-left', 'drawer-right');
+  $('askp').hidden = false;
+  $('ask-scope').textContent = askScopeLabel();
+  $('ask-input').focus();
+}
+
+function renderAsk(result) {
+  const out = $('ask-out');
+  out.hidden = false;
+
+  const grounding = $('ask-grounding');
+  if (result.evidenceCount === 0) {
+    grounding.className = 'askgrounding ungrounded';
+    grounding.textContent = 'No context found · nothing to ground an answer on';
+  } else if (result.grounded) {
+    grounding.className = 'askgrounding grounded';
+    grounding.textContent = `Grounded in ${result.citations.length} of ${result.evidenceCount} context items`;
+  } else {
+    grounding.className = 'askgrounding ungrounded';
+    grounding.textContent = `Ungrounded · ${result.evidenceCount} items in scope, none cited`;
+  }
+  $('ask-answer').textContent = result.answer;
+
+  // --- evidence: real objects, navigable ---------------------------------
+  const evHost = $('ask-evidence');
+  evHost.textContent = '';
+  $('ask-ev-label').hidden = result.citations.length === 0;
+  for (const c of result.citations) {
+    const li = document.createElement('li');
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    btn.className = 'ev';
+    const meta = metaFor(c.type);
+
+    const sw = document.createElement('span');
+    sw.className = `sw ${meta.accent}`;
+    const t = document.createElement('span');
+    t.className = 'et';
+    t.textContent = c.title || '(untitled)';
+    const k = document.createElement('span');
+    k.className = 'ek';
+    k.textContent = meta.label;
+    btn.append(sw, t, k);
+
+    // Why this object was in scope — provenance the user can read.
+    const why = c.why?.length
+      ? c.why.map((w) => `${w.verb} · ${w.confidenceState}`).join(' · ')
+      : `${c.layer} · rank ${c.rank}`;
+    const w = document.createElement('span');
+    w.className = 'ewhy';
+    w.textContent = why;
+    btn.append(w);
+
+    btn.onclick = () => view.revealAndFocus(c.objectId);
+    li.append(btn);
+    evHost.append(li);
+  }
+
+  // --- proposed tasks: inert until the user confirms ----------------------
+  const taskHost = $('ask-tasks');
+  taskHost.textContent = '';
+  $('ask-task-label').hidden = result.proposedTasks.length === 0;
+  for (const proposal of result.proposedTasks) {
+    taskHost.append(taskProposalRow(proposal, result.projectId));
+  }
+}
+
+/** One inert proposal. Nothing exists until Create is pressed. */
+function taskProposalRow(proposal, fallbackProjectId) {
+  const li = document.createElement('li');
+  const title = document.createElement('span');
+  title.className = 'tt';
+  title.textContent = proposal.title;
+  li.append(title);
+
+  if (proposal.sourceTitle) {
+    const src = document.createElement('span');
+    src.className = 'tsrc';
+    src.textContent = `from: ${proposal.sourceTitle}`;
+    li.append(src);
+  }
+
+  const row = document.createElement('div');
+  row.className = 'trow';
+  const create = document.createElement('button');
+  create.type = 'button';
+  create.className = 'btn-run';
+  create.textContent = 'Create';
+  const open = document.createElement('button');
+  open.type = 'button';
+  open.className = 'pill ghost sm';
+  open.textContent = 'Source';
+  open.disabled = !proposal.sourceObjectId;
+  open.onclick = () => proposal.sourceObjectId && view.revealAndFocus(proposal.sourceObjectId);
+
+  const projectId = proposal.projectId || fallbackProjectId;
+  create.disabled = !projectId;
+  create.onclick = async () => {
+    create.disabled = true;
+    try {
+      // Creation goes to the CORE, as the USER, through the ordinary
+      // authenticated write path. The assistant never writes (INV-8).
+      const { task } = await api(`/api/projects/${projectId}/tasks`, {
+        method: 'POST',
+        body: JSON.stringify({
+          title: proposal.title,
+          body: proposal.body,
+          sourceObjectId: proposal.sourceObjectId,
+          assistantAssisted: true,
+        }),
+      });
+      row.textContent = '';
+      const done = document.createElement('span');
+      done.className = 'created';
+      done.textContent = 'Created';
+      const openTask = document.createElement('button');
+      openTask.type = 'button';
+      openTask.className = 'pill ghost sm';
+      openTask.textContent = 'Open in graph';
+      openTask.onclick = () => view.revealAndFocus(task.id);
+      row.append(done, openTask);
+      await loadGraph();
+      view.setMatches([task.id]);
+    } catch (err) {
+      create.disabled = false;
+      setAskStatus(`Not created: ${err.message}`, 'err');
+    }
+  };
+  row.append(create, open);
+  li.append(row);
+  return li;
+}
+
+async function runAsk(question) {
+  if (state.ask.busy) return;
+  const q = String(question ?? '').trim();
+  if (!q) {
+    setAskStatus('Ask a question.', 'err');
+    return;
+  }
+  state.ask.busy = true;
+  $('ask-submit').disabled = true;
+  setAskStatus('Retrieving context…');
+
+  try {
+    const res = await fetch(`${ASSISTANT_URL}/ask`, {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json',
+        // The user's own credential. The assistant relays it; the CORE
+        // validates it and derives the principal (INV-4a).
+        authorization: `Dev ${state.principalId}`,
+      },
+      body: JSON.stringify({ question: q, targetId: state.selected?.node?.id ?? null }),
+    });
+    const data = await res.json();
+    if (!data.ok) {
+      $('ask-out').hidden = true;
+      setAskStatus(
+        data.stage === 'context'
+          ? `Context unavailable: ${data.detail}`
+          : `Model unavailable: ${data.detail}`,
+        'err',
+      );
+      return;
+    }
+    state.ask.result = data;
+    renderAsk(data);
+    setAskStatus(`${data.intent} · ${data.provider}`, 'ok');
+    $('ask-provider').textContent = `${data.provider.toUpperCase()} · ${data.weightSetVersion}`;
+  } catch (err) {
+    $('ask-out').hidden = true;
+    setAskStatus(`Assistant unreachable: ${err.message}`, 'err');
+  } finally {
+    state.ask.busy = false;
+    $('ask-submit').disabled = false;
+  }
+}
+
+function wireAsk() {
+  const openers = ['tool-ask'];
+  for (const id of openers) {
+    const e = $(id);
+    if (!e) continue;
+    e.addEventListener('click', openAsk);
+    e.addEventListener('keydown', (ev) => {
+      if (ev.key === 'Enter' || ev.key === ' ') {
+        ev.preventDefault();
+        openAsk();
+      }
+    });
+  }
+  $('ins-ask').onclick = () => {
+    openAsk();
+    $('ask-scope').textContent = askScopeLabel();
+  };
+  $('ask-close').onclick = () => {
+    $('askp').hidden = true;
+  };
+  $('ask-form').onsubmit = (e) => {
+    e.preventDefault();
+    runAsk($('ask-input').value);
+  };
+  $('ask-summarize').onclick = () => {
+    $('ask-input').value = 'Summarize this';
+    runAsk('Summarize this');
+  };
+  $('ask-extract').onclick = () => {
+    $('ask-input').value = 'Extract tasks from this';
+    runAsk('Extract tasks from this');
+  };
+  $('ask-input').addEventListener('keydown', (e) => {
+    if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) {
+      e.preventDefault();
+      runAsk($('ask-input').value);
+    }
+  });
+}
+
 /* ------------------------------------------------------------ chrome ---- */
 
 function wireGraphControls() {
@@ -642,6 +891,7 @@ function startClock() {
 
 wirePrincipal();
 wireGraphControls();
+wireAsk();
 wireSearch();
 wireCapture();
 wireChrome();

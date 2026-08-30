@@ -193,7 +193,7 @@ body::before {
 .center { grid-area: center; position: relative; min-width: 0; overflow: hidden; }
 .field-wrap { position: absolute; inset: 0; pointer-events: none; }
 .field-wrap > svg, .field-wrap .inspector, .field-wrap .legend-pill,
-.field-wrap .gctl { pointer-events: auto; }
+.field-wrap .gctl, .field-wrap .askp { pointer-events: auto; }
 .field-svg {
   position: absolute; inset: 0; width: 100%; height: 100%; display: block;
   cursor: grab; touch-action: none; --zoom: 1;
@@ -418,6 +418,69 @@ body::before {
 .zoomctl .mono { font-size: 9px; color: var(--ink-faint); min-width: 32px; text-align: center; }
 .zoomctl .iconbtn { width: 20px; height: 20px; border: 1px solid var(--hair); }
 
+/* ---- P3.4 assistant panel -----------------------------------------
+   Same HUD language as .gctl (pure black, hairline border, orange-outline
+   pills, tracked uppercase labels). It is an intelligence layer over the
+   existing graph, not a chat window bolted beside it. */
+.askp {
+  position: absolute; top: 30px; left: 18px; z-index: 11; width: 340px;
+  max-height: calc(100% - 60px); display: flex; flex-direction: column;
+  background: rgba(3,3,4,0.92); border: 1px solid var(--hair-2);
+  backdrop-filter: blur(4px);
+}
+.askp > header {
+  display: flex; align-items: center; gap: var(--s2);
+  padding: 6px 8px 6px 10px; border-bottom: 1px solid var(--hair-faint);
+  white-space: nowrap; flex: none;
+}
+.askp > header .ct { margin-left: auto; font-size: 8.5px; color: var(--ink-ghost); letter-spacing: 0.06em; }
+.askbody { padding: var(--s2) 10px 10px; overflow-y: auto; scrollbar-width: thin; }
+.askscope { font-size: 9px; letter-spacing: 0.06em; color: var(--action); margin-bottom: 5px; }
+.askform textarea {
+  width: 100%; font: inherit; font-size: 11px; color: var(--ink);
+  background: rgba(0,0,0,0.5); border: 1px solid var(--hair-2); border-radius: 2px;
+  padding: 6px 8px; resize: vertical; min-height: 38px;
+}
+.askform textarea::placeholder { color: var(--ink-ghost); }
+.askactions { display: flex; align-items: center; gap: 5px; margin-top: var(--s2); flex-wrap: wrap; }
+#ask-status { font-size: 10px; color: var(--ink-faint); }
+#ask-status.err { color: var(--error); }
+#ask-status.ok { color: var(--ok); }
+
+.askout { margin-top: var(--s3); border-top: 1px solid var(--hair-faint); padding-top: var(--s3); }
+/* Grounding is stated, never implied — an ungrounded answer says so. */
+.askgrounding {
+  font: 600 8px/1 var(--font-ui); letter-spacing: 0.13em; text-transform: uppercase;
+  margin-bottom: 6px;
+}
+.askgrounding.grounded { color: var(--ok); }
+.askgrounding.ungrounded { color: var(--routines); }
+.askanswer {
+  margin: 0 0 var(--s3); color: var(--ink); font-size: 11px; line-height: 1.55;
+  white-space: pre-wrap; overflow-wrap: anywhere;
+}
+
+.evlist, .tasklist { list-style: none; margin: 4px 0 var(--s3); padding: 0; display: flex; flex-direction: column; gap: 3px; }
+.evlist .ev {
+  display: grid; grid-template-columns: 6px 1fr auto; gap: 7px; align-items: center;
+  width: 100%; text-align: left; background: transparent; border: none;
+  border-top: 1px solid var(--hair-faint); padding: 5px 0; cursor: pointer; font: inherit; color: inherit;
+}
+.evlist li:first-child .ev { border-top: none; }
+.evlist .sw { width: 6px; height: 6px; border-radius: 50%; background: var(--memory); }
+.evlist .sw.context, .evlist .sw.core { background: var(--action); }
+.evlist .sw.apps { background: var(--apps); } .evlist .sw.routines { background: var(--routines); }
+.evlist .et { color: var(--ink); font-size: 10.5px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.evlist .ev:hover .et { color: var(--action); }
+.evlist .ek { font: 600 7.5px/1 var(--font-ui); letter-spacing: 0.1em; text-transform: uppercase; color: var(--ink-ghost); }
+.evlist .ewhy { grid-column: 2 / -1; font: 500 8px/1.3 var(--font-mono); color: var(--ink-ghost); letter-spacing: 0.03em; margin-top: -2px; }
+
+.tasklist li { border-left: 2px solid var(--routines); padding: 5px 0 5px 9px; }
+.tasklist .tt { color: var(--ink); font-size: 10.5px; display: block; overflow-wrap: anywhere; }
+.tasklist .tsrc { font: 500 8px/1.3 var(--font-mono); color: var(--ink-ghost); display: block; margin-top: 2px; }
+.tasklist .trow { display: flex; gap: 5px; align-items: center; margin-top: 5px; }
+.tasklist .trow .created { font: 600 8px/1 var(--font-ui); letter-spacing: 0.12em; text-transform: uppercase; color: var(--ok); }
+
 /* ---- inspector: slide-up overlay, only on selection ------------- */
 .inspector {
   position: absolute; left: 0; right: 0; bottom: 0;
@@ -620,6 +683,7 @@ table.routines { width: 100%; border-collapse: collapse; font-size: 10px; }
   .rail-toggle { display: grid; }
   .brand .sub { display: none; }
   .gctl { width: 232px; top: 26px; right: 12px; }
+  .askp { width: 300px; top: 26px; left: 12px; }
 }
 
 @media (max-width: 720px) {
@@ -640,9 +704,9 @@ table.routines { width: 100%; border-collapse: collapse; font-size: 10px; }
   .field-svg.engaged { touch-action: none; }
   .field-readout, .legend-pill, .node-tip { display: none; }
   /* Graph controls become an in-flow surface under the graph (blueprint §18). */
-  .gctl {
+  .gctl, .askp {
     position: static; width: auto; margin: var(--s2) var(--s3) 0;
-    backdrop-filter: none; background: var(--bg-1);
+    backdrop-filter: none; background: var(--bg-1); max-height: none;
   }
   .gctl .gbody { gap: 5px; }
   .results { max-height: 118px; }

@@ -5,8 +5,10 @@
 //   GET  /api/projects
 //   GET  /api/projects/:id
 //   POST /api/projects/:id/notes      { title?, body? }
+//   POST /api/projects/:id/tasks      { title?, body?, sourceObjectId? }  (confirmed)
 //   GET  /api/graph                   context graph read model (P3.2)
 //   GET  /api/objects/:id             one object + its edges (Context Inspector)
+//   POST /ctx/context-set             Context API — assistant-facing (P2.6 §10, §14.1)
 //   static:  /  ->  adapters/web/*
 
 import { createServer, type IncomingMessage, type ServerResponse } from 'node:http';
@@ -17,8 +19,10 @@ import { config } from '../../config.ts';
 import { buildContainer, type Container } from './container.ts';
 import { principalFromRequest } from './auth.ts';
 import { captureNote } from '../../application/capture-note.ts';
+import { createTask } from '../../application/create-task.ts';
 import { viewProject, listProjects } from '../../application/view-project.ts';
 import { buildContextGraph, inspectObject } from '../../application/context-graph.ts';
+import { assembleContextSet } from '../../application/context-set.ts';
 import { DomainError } from '../../domain/errors.ts';
 
 const webDir = join(dirname(fileURLToPath(import.meta.url)), '../web');
@@ -93,6 +97,53 @@ export function createApp(container: Container = buildContainer()) {
         return send(res, 200, { status: 'ok' });
       }
 
+      // ---------------------------------------------------------------------
+      // CONTEXT API (P2.6 §10, §14.1) — the assistant's ONLY data path.
+      //
+      // Two independent credentials with different jobs:
+      //   1. X-Service-Token  authenticates the CALLER (the assistant service)
+      //      and authorises it to reach this surface. It conveys NO user identity.
+      //   2. Authorization    is the END USER's own credential, relayed
+      //      unmodified by the assistant. The core validates it itself and
+      //      derives Principal from it.
+      //
+      // A call presenting only a service token is rejected: there is no user to
+      // act for. The principal is NEVER read from a body field or an
+      // assistant-set header, so the assistant cannot supply, substitute or
+      // elevate a principal (INV-4a) — it holds no credential for anyone but
+      // the user currently talking to it.
+      if (path === '/ctx/context-set') {
+        if (method !== 'POST') return send(res, 404, { error: 'not found' });
+
+        const serviceToken = req.headers['x-service-token'];
+        if (
+          typeof serviceToken !== 'string' ||
+          serviceToken !== config.contextApiServiceToken
+        ) {
+          return send(res, 401, { error: 'service token required' });
+        }
+
+        // The end user's own credential — validated here, by the core.
+        const principalId = principalFromRequest(req);
+        if (!principalId) {
+          return send(res, 401, { error: 'end-user credential required' });
+        }
+        const ctxScope = await container.scopeResolver.resolve(principalId);
+        if (!ctxScope) return send(res, 401, { error: 'unknown principal' });
+
+        const body = await readJson(req);
+        const purposeRaw = body['purpose'];
+        const purpose =
+          purposeRaw === 'summarize' || purposeRaw === 'extract_tasks' ? purposeRaw : 'question';
+        const result = await assembleContextSet(container, ctxScope, {
+          purpose,
+          queryText: typeof body['queryText'] === 'string' ? body['queryText'] : '',
+          targetId: typeof body['targetId'] === 'string' ? body['targetId'] : null,
+        });
+        // Unavailable is a distinct result from an empty set (P2.6 §10.3).
+        return send(res, result.ok ? 200 : 409, result);
+      }
+
       if (path.startsWith('/api/')) {
         // --- AUTHORIZATION: resolve principal, then the per-request scope, once.
         const principalId = principalFromRequest(req);
@@ -131,6 +182,23 @@ export function createApp(container: Container = buildContainer()) {
         if (method === 'GET' && projMatch) {
           const view = await viewProject(container, scope, projMatch[1]!);
           return send(res, 200, view);
+        }
+
+        // Confirmed task creation. The assistant proposes; only a user
+        // request carrying their own credential reaches this (INV-8).
+        const taskMatch = /^\/api\/projects\/([0-9a-fA-F-]+)\/tasks$/.exec(path);
+        if (method === 'POST' && taskMatch) {
+          const body = await readJson(req);
+          const task = await createTask(container, {
+            scope,
+            projectId: taskMatch[1]!,
+            title: body['title'],
+            body: body['body'],
+            sourceObjectId:
+              typeof body['sourceObjectId'] === 'string' ? body['sourceObjectId'] : null,
+            assistantAssisted: body['assistantAssisted'] === true,
+          });
+          return send(res, 201, { task });
         }
 
         const noteMatch = /^\/api\/projects\/([0-9a-fA-F-]+)\/notes$/.exec(path);

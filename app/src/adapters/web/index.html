@@ -60,6 +60,11 @@
             <span><span class="nm">Capture</span><br /><span class="ds">Save context into a project instantly</span></span>
             <span class="ar" aria-hidden="true">→</span>
           </div>
+          <div class="tool click" id="tool-ask" role="button" tabindex="0">
+            <span class="ic" aria-hidden="true">✧</span>
+            <span><span class="nm">Ask</span><br /><span class="ds">Question your context, grounded in real objects</span></span>
+            <span class="ar" aria-hidden="true">→</span>
+          </div>
           <div class="tool apps off">
             <span class="ic" aria-hidden="true">◈</span>
             <span><span class="nm">GitHub</span><br /><span class="ds">Repository activity</span></span>
@@ -188,6 +193,42 @@
             </div>
           </section>
 
+          <!-- P3.4 — the intelligence layer over the existing second brain.
+               Every answer is grounded in a ContextSet the core assembled for
+               this principal; every citation is a real object id that selects
+               and focuses the graph node. -->
+          <section class="askp" id="askp" aria-label="Ask your context" hidden>
+            <header>
+              <span class="label">Ask Context</span>
+              <span class="mono ct" id="ask-provider">—</span>
+              <button class="iconbtn close" id="ask-close" aria-label="Close assistant">✕</button>
+            </header>
+            <div class="askbody">
+              <form class="askform" id="ask-form" autocomplete="off">
+                <div class="askscope mono" id="ask-scope">Whole workspace</div>
+                <textarea id="ask-input" rows="2" placeholder="Why did we choose this? · What was I working on? · Summarize this · Extract tasks"
+                          aria-label="Ask a question about your context"></textarea>
+                <div class="askactions">
+                  <button type="submit" class="btn-run" id="ask-submit">Ask</button>
+                  <button type="button" class="pill ghost sm" id="ask-summarize">Summarize</button>
+                  <button type="button" class="pill ghost sm" id="ask-extract">Extract tasks</button>
+                  <span id="ask-status" role="status" aria-live="polite"></span>
+                </div>
+              </form>
+
+              <div class="askout" id="ask-out" hidden>
+                <div class="askgrounding" id="ask-grounding"></div>
+                <p class="askanswer" id="ask-answer"></p>
+
+                <div class="label" id="ask-ev-label" hidden>Evidence · click to open in graph</div>
+                <ul class="evlist" id="ask-evidence"></ul>
+
+                <div class="label" id="ask-task-label" hidden>Proposed tasks · review before creating</div>
+                <ul class="tasklist" id="ask-tasks"></ul>
+              </div>
+            </div>
+          </section>
+
           <div class="legend-pill" aria-label="Layers">
             <span class="li"><span class="sw apps"></span>Apps</span>
             <span class="li"><span class="sw routines"></span>Routines</span>
@@ -205,6 +246,7 @@
             <div class="ibar">
               <span class="label">Context Inspector</span>
               <span class="label mono" id="ins-count">—</span>
+              <button class="pill ghost sm" id="ins-ask">Ask about this</button>
               <button class="pill ghost sm" id="ins-focus">Focus</button>
               <button class="iconbtn close" id="ins-close" aria-label="Close inspector">✕</button>
             </div>
@@ -230,7 +272,7 @@
               <form class="cap-form" id="cap-form" autocomplete="off">
                 <div class="captarget mono" id="cap-target">—</div>
                 <label for="note-title">Title <span class="mono" style="color: var(--ink-ghost)">optional if body set</span></label>
-                <input id="note-title" name="title" type="text" maxlength="200" placeholder="Chose token-bucket over sliding-window" />
+                <input id="note-title" name="title" type="text" maxlength="200" placeholder="Short title — e.g. a decision you just made" />
                 <label for="note-body">Body</label>
                 <textarea id="note-body" name="body" rows="2" placeholder="What did you decide, and why?"></textarea>
                 <div class="cap-actions">
