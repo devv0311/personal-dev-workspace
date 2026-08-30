@@ -447,6 +447,61 @@ boundary testable. Setting `ANTHROPIC_API_KEY` activates a real adapter behind
 the same port (no new dependency; uses global `fetch`). Swapping providers must
 not change the authorization, provenance or grounding results.
 
+## Visual shell reconciliation (T3.1)
+
+`src/adapters/web/` was brought into conformance with the **reconciled**
+`Design_Dashboard_Aesthetic_Claude_Blueprint.md` (T2.1) and the T2.2 decision
+review. The command-centre composition, the interactive graph (P3.2) and the
+cross-surface object identity (P3.3) are unchanged; the reference-derived
+taxonomy that had leaked into the shell was removed. No backend, schema,
+dependency or test was touched. `tsc --noEmit` clean, 75/75 tests pass, no
+horizontal overflow at 2048 / 1600 / 1140 / 390, clean console.
+
+The five known deviations at blueprint §13, resolved:
+
+1. **Colour.** `--apps` / `--memory` / `--routines` retired from `styles.css`.
+   One action accent (`--action`) doing only three jobs — now/next, action,
+   current focus — a four-tier greyscale contrast ladder, and a bounded,
+   token-named categorical palette (`--proj-1..8`) **reserved for Project
+   identity**, applied additively by project order (mod 8) as a structural
+   placeholder. Object class is carried by its name in text, never by hue; the
+   final per-Project assignment rule and >N overflow behaviour stay deferred
+   (blueprint Q1). No colour value is hard-coded outside a token.
+2. **Offline orbits removed, not dimmed.** The `APPLICATIONS` / `ROUTINES`
+   rings, their badges/nodes/labels, the decorative particle core and the
+   ambient ~6.5k-dot memory lattice are gone. The field draws only real
+   objects — the Workspace root (a real entity, labelled `WORKSPACE`), its
+   projects, their captured context — and real or genuinely computed edges.
+   A sparse workspace now looks sparse. The honeycomb canvas texture was
+   replaced with a neutral dot grid.
+3. **No ambient motion.** The ring rotation is gone with the ring. Nothing
+   continuous moves; only selection/focus/search transitions do, all
+   reduced-motion gated.
+4. **Retired reference widgets not recreated.** The Skills Deck, the Routines
+   table, the Micro-Apps launchers and the "Today's mix" bar were removed. The
+   left rail is *Actions* (Capture, Ask) + *Session* (real clock/zones/day
+   progress) + *Project Pulse* (P3.3 real parts, `PREVIEW`-tagged for the
+   unbacked task counts). The right rail is *Attention* (`PREVIEW`) plus a
+   short note that the region is intentionally quiet — retired widgets were not
+   recreated to fill it.
+5. **Relationship rows (Q7).** Each row carries verb + direction + confidence
+   state as text, with an expandable **Provenance** slot (origin, author,
+   created, provenance kind, visibility) that the layout no longer precludes
+   from carrying contributing signals later. Weak / possible relationships are
+   filtered out of the primary view (§5.3); the on-demand "possibly related"
+   affordance stays deferred (Q6).
+
+Other shell changes: header identity is `DEVWORKSPACE · persistent context
+layer` (product vocabulary; the "Agentic Context OS" lockup and the non-functional
+`Menu` / layout / info header controls were removed); the search input applies a
+**spotlight** — the field attenuates and matches stay in place, they never
+reflow (§5.7); keyboard focus uses a dedicated `--focus` token, not a data hue.
+
+**P3.4's `Ask Context` panel** predates T3.1 on this branch. T3.1 neither built
+nor removed it — it was left functionally intact and only re-tokenised for
+colour conformance. Whether an assistant surface belongs in the shell is
+blueprint Q8, deferred to the AI-layer milestone's acceptance.
+
 ## Deferred (documented, not built here)
 
 Per P2.7 §15 / §16 — belongs to later milestones, not this slice:

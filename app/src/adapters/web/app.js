@@ -77,7 +77,7 @@ async function loadGraph({ keepSelection = true } = {}) {
     renderPulse(graph);
 
     $('field-empty').hidden = graph.stats.projects > 0 || graph.stats.captures > 0;
-    $('ro-tl').textContent = `CONTEXT GRAPH · LIVE · ${graph.workspaceId.slice(0, 8)}`;
+    $('ro-tl').textContent = `WORKSPACE · ${graph.workspaceId.slice(0, 8)}`;
 
     const keep = keepSelection && state.selected ? state.selected.node.id : null;
     if (keep && graph.nodes.some((n) => n.id === keep)) view.select(keep);
@@ -100,10 +100,12 @@ async function loadGraph({ keepSelection = true } = {}) {
 function renderFilters(graph) {
   const host = $('g-filters');
   host.textContent = '';
+  // Filters derive from the object types actually present — never a fixed list,
+  // and never a colour-keyed layer taxonomy. Class is carried by its name.
   const chips = filterChipsFor(graph);
   for (const chip of chips) {
     const b = document.createElement('button');
-    b.className = `chip on ${chip.accent}`;
+    b.className = 'chip on';
     b.type = 'button';
     b.dataset.type = chip.key;
     b.setAttribute('aria-pressed', 'true');
@@ -112,25 +114,6 @@ function renderFilters(graph) {
       const on = b.classList.toggle('on');
       b.setAttribute('aria-pressed', String(on));
       view.setTypeFilter(chip.key, on);
-    };
-    host.append(b);
-  }
-  // Scaffold layers: no integration is connected and no routine engine exists,
-  // so these are toggles over the offline orbit scaffold, labelled as such.
-  for (const [key, label] of [
-    ['apps', 'Apps'],
-    ['routines', 'Routines'],
-  ]) {
-    const b = document.createElement('button');
-    b.className = `chip on ${key} scaffold`;
-    b.type = 'button';
-    b.setAttribute('aria-pressed', 'true');
-    b.title = 'Orbit scaffold — no integration connected yet';
-    b.innerHTML = `<span class="sw"></span>${label}`;
-    b.onclick = () => {
-      const on = b.classList.toggle('on');
-      b.setAttribute('aria-pressed', String(on));
-      view.setScaffold(key, on);
     };
     host.append(b);
   }
@@ -180,7 +163,8 @@ async function openInspector(node) {
   $('center').classList.add('inspecting');
   $('ins-title').textContent = node.title || '(untitled)';
   $('ins-type').textContent = meta.label;
-  $('ins-dot').className = `dot ${meta.accent === 'context' ? 'action' : meta.accent}`;
+  // Class is stated in the label beside it; the dot stays neutral (§4.13).
+  $('ins-dot').className = 'dot';
   $('ins-id').textContent = `${node.id.slice(0, 8)}…`;
   $('ins-body').hidden = true;
   $('ctx-list').textContent = '';
@@ -236,9 +220,11 @@ async function openInspector(node) {
       $('ctx-empty').hidden = detail.children.length > 0;
     }
 
-    const rels = detail.edges;
+    // Weak / possible relationships are not rendered in the primary context
+    // view (§5.3); an on-demand "possibly related" affordance is deferred (Q6).
+    const rels = detail.edges.filter((r) => r.edge?.confidenceState !== 'weak');
     for (const r of rels) {
-      $('rel-list').append(relationshipRow(r, o.id));
+      $('rel-list').append(relationshipRow(r));
     }
     $('rel-empty').hidden = rels.length > 0;
 
@@ -286,10 +272,23 @@ function contextRow(id, title, body, type) {
   return li;
 }
 
-/** One real relationship edge, traversable to the object at its far end. */
-function relationshipRow(r, selfId) {
+const CONFIDENCE_LABEL = {
+  known: 'Known',
+  user_confirmed: 'Confirmed',
+  inferred_high: 'Inferred',
+  structural: 'Structural',
+};
+
+/**
+ * One real relationship edge. Individually listed — never an aggregate count —
+ * carrying its verb, direction and confidence state as text, an expandable slot
+ * for provenance and (later) contributing signals, and traversal to the far
+ * object (§5.3, §6.4, Q7).
+ */
+function relationshipRow(r) {
   const li = document.createElement('li');
   const arrow = r.direction === 'out' ? '→' : '←';
+
   const btn = document.createElement('button');
   btn.type = 'button';
   btn.className = 'rel-row';
@@ -304,15 +303,44 @@ function relationshipRow(r, selfId) {
   other.className = 'ot';
   other.textContent = r.other ? r.other.title || '(untitled)' : 'not visible';
 
-  const prov = document.createElement('span');
-  prov.className = 'pv';
-  prov.textContent = r.edge.synthesised
-    ? r.edge.provenance.kind
-    : `${r.edge.origin} · ${r.edge.confidenceState}`;
+  const state = r.edge.synthesised ? 'structural' : r.edge.confidenceState;
+  const conf = document.createElement('span');
+  conf.className = 'conf' + (state === 'inferred_high' ? ' inferred' : '');
+  conf.textContent = CONFIDENCE_LABEL[state] || state || 'known';
 
-  btn.append(verb, dir, other, prov);
+  btn.append(verb, dir, other, conf);
   if (r.other) btn.onclick = () => view.revealAndFocus(r.other.id);
   li.append(btn);
+
+  // Expandable provenance slot — populated with what the edge already carries;
+  // the layout does not preclude contributing signals being added later.
+  const detail = document.createElement('div');
+  detail.className = 'rel-detail';
+  detail.hidden = true;
+  const line = (t) => {
+    const d = document.createElement('div');
+    d.textContent = t;
+    detail.append(d);
+  };
+  line(`origin · ${r.edge.origin ?? '—'}`);
+  if (r.edge.authorId) line(`author · ${String(r.edge.authorId).slice(0, 8)}…`);
+  if (r.edge.createdAt) line(`created · ${fmtDate(r.edge.createdAt)}`);
+  if (r.edge.provenance?.kind) line(`provenance · ${r.edge.provenance.kind}`);
+  line(`visibility · ${r.edge.visibilityScope ?? 'shared'}`);
+
+  const disclose = document.createElement('button');
+  disclose.type = 'button';
+  disclose.className = 'disclose';
+  disclose.setAttribute('aria-expanded', 'false');
+  disclose.textContent = '＋ Provenance';
+  disclose.onclick = () => {
+    const open = detail.hidden;
+    detail.hidden = !open;
+    disclose.setAttribute('aria-expanded', String(open));
+    disclose.textContent = open ? '－ Provenance' : '＋ Provenance';
+  };
+
+  li.append(disclose, detail);
   return li;
 }
 
@@ -335,7 +363,7 @@ function renderPulse(graph, node = null, detail = null) {
     $('pulse-name').textContent = node.title.toUpperCase();
     $('pulse-captures').textContent = String(total);
   } else if (node) {
-    $('pulse-name').textContent = (node.title || 'CONTEXT CORE').toUpperCase();
+    $('pulse-name').textContent = (node.title || 'WORKSPACE').toUpperCase();
     $('pulse-captures').textContent = String(linkId ? total : globalCaptures);
   } else {
     const n = graph.stats?.projects ?? 0;
@@ -424,7 +452,7 @@ function renderResults() {
   host.textContent = '';
   if (state.results.length === 0) {
     host.hidden = true;
-    view.setMatches([]);
+    view.setMatches([]); // clears the spotlight
     return;
   }
   state.results.forEach((n, i) => {
@@ -446,7 +474,9 @@ function renderResults() {
     host.append(li);
   });
   host.hidden = false;
-  view.setMatches(state.results.map((n) => n.id));
+  // Search attenuates the field and lights matches in place — they never
+  // reflow (§5.7). The results list is a keyboard affordance over the same set.
+  view.setMatches(state.results.map((n) => n.id), { spotlight: true });
 }
 
 function pickResult(i) {
@@ -787,7 +817,7 @@ function wireCapture() {
     $('note-title').focus();
     $('note-title').scrollIntoView({ block: 'center', behavior: 'smooth' });
   };
-  for (const id of ['tool-capture', 'skill-capture']) {
+  for (const id of ['tool-capture']) {
     const e = $(id);
     e.addEventListener('click', () => {
       if (!state.selected) {

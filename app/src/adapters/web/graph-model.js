@@ -13,30 +13,30 @@
 export const GEO = {
   CX: 500,
   CY: 500,
-  R_APPS: 478, // applications orbit (scaffold)
-  R_RT: 410, // routines orbit (scaffold)
-  R_MEM: 338, // memory band outer edge
-  R_CORE: 150, // particle core radius
+  R_MEM: 338, // context band outer edge
   R_PROJ: 128, // project ring
   R_IN: 168, // first capture ring
   R_OUT: 324, // last capture ring
-  WEDGE_HALF: 0.46, // ~26° half-width per project cluster
-  START: -Math.PI / 2 + 0.55, // first project at ~10 o'clock (P3.1)
+  WEDGE_HALF: 0.46, // ~26° half-width per project fan
+  START: -Math.PI / 2 + 0.55, // first project at ~10 o'clock
 };
 
 export const ZOOM = { MIN: 0.35, MAX: 6, STEP: 1.22 };
 
-/** Presentation metadata per real object type. Extending the domain vocabulary
- *  is a one-line change here — the graph architecture does not move. */
+/** Presentation metadata per real object type. `accent` is a neutral hook only
+ *  — object class is carried by its name in text, never by hue (§4.13, §5.4).
+ *  `layer` groups the three structural kinds (root / container / context) that
+ *  the deterministic layout places; it is not a colour taxonomy.
+ *  Extending the domain vocabulary is a one-line change here. */
 export const TYPE_META = {
-  workspace: { label: 'Context Core', plural: 'Core', layer: 'core', accent: 'core', r: 0 },
+  workspace: { label: 'Workspace', plural: 'Workspace', layer: 'core', accent: 'core', r: 0 },
   project: { label: 'Project', plural: 'Projects', layer: 'context', accent: 'context', r: 8 },
-  task: { label: 'Task', plural: 'Tasks', layer: 'context', accent: 'routines', r: 5 },
-  note: { label: 'Note', plural: 'Notes', layer: 'memory', accent: 'memory', r: 4.2 },
-  idea: { label: 'Idea', plural: 'Ideas', layer: 'memory', accent: 'memory', r: 4.2 },
-  decision: { label: 'Decision', plural: 'Decisions', layer: 'memory', accent: 'memory', r: 4.6 },
-  resource: { label: 'Resource', plural: 'Resources', layer: 'memory', accent: 'apps', r: 4.2 },
-  checkpoint: { label: 'Checkpoint', plural: 'Checkpoints', layer: 'memory', accent: 'memory', r: 4.6 },
+  task: { label: 'Task', plural: 'Tasks', layer: 'context', accent: 'node', r: 5 },
+  note: { label: 'Note', plural: 'Notes', layer: 'memory', accent: 'node', r: 4.2 },
+  idea: { label: 'Idea', plural: 'Ideas', layer: 'memory', accent: 'node', r: 4.2 },
+  decision: { label: 'Decision', plural: 'Decisions', layer: 'memory', accent: 'node', r: 4.6 },
+  resource: { label: 'Resource', plural: 'Resources', layer: 'memory', accent: 'node', r: 4.2 },
+  checkpoint: { label: 'Checkpoint', plural: 'Checkpoints', layer: 'memory', accent: 'node', r: 4.6 },
 };
 
 export const metaFor = (type) => TYPE_META[type] ?? TYPE_META.note;

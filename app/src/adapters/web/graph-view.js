@@ -27,7 +27,7 @@ import {
 } from './graph-model.js';
 
 const NS = 'http://www.w3.org/2000/svg';
-const { CX, CY, R_APPS, R_RT, R_MEM, R_CORE } = GEO;
+const { CX, CY } = GEO;
 
 function el(name, attrs, parent) {
   const n = document.createElementNS(NS, name);
@@ -35,28 +35,10 @@ function el(name, attrs, parent) {
   if (parent) parent.append(n);
   return n;
 }
-function rng(seed) {
-  return () => {
-    seed = (seed + 0x6d2b79f5) | 0;
-    let t = Math.imul(seed ^ (seed >>> 15), 1 | seed);
-    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
-    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
-  };
-}
-function hexPath(cx, cy, r) {
-  let d = '';
-  for (let i = 0; i < 6; i++) {
-    const a = -Math.PI / 2 + i * (Math.PI / 3);
-    d += (i ? 'L' : 'M') + (cx + Math.cos(a) * r).toFixed(1) + ' ' + (cy + Math.sin(a) * r).toFixed(1) + ' ';
-  }
-  return d + 'Z';
-}
 const setClass = (node, value) => {
   if (node.getAttribute('class') !== value) node.setAttribute('class', value);
 };
 const ease = (t) => (t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2);
-
-const APP_GLYPHS = ['◆', '●', '▲', '■', '✦', '◇', '◈', '▸', '✕', '◎'];
 
 export function createGraphView(opts) {
   const svg = opts.svg;
@@ -65,12 +47,6 @@ export function createGraphView(opts) {
   const onState = opts.onState ?? (() => {});
 
   const layers = {
-    rings: svg.querySelector('#f-rings'),
-    mem: svg.querySelector('#f-mem'),
-    core: svg.querySelector('#f-core'),
-    apps: svg.querySelector('#f-apps'),
-    rt: svg.querySelector('#f-rt'),
-    labels: svg.querySelector('#f-labels'),
     edges: svg.querySelector('#g-edges'),
     nodes: svg.querySelector('#g-nodes'),
   };
@@ -83,7 +59,6 @@ export function createGraphView(opts) {
     selectedId: null,
     hoverId: null,
     disabledTypes: new Set(),
-    scaffold: { apps: true, routines: true },
     collapsed: new Set(),
     matches: new Set(),
     transform: { k: 1, tx: 0, ty: 0 },
@@ -154,160 +129,24 @@ export function createGraphView(opts) {
     anim = null;
   };
 
-  /* ------------------------------------------------------------- scaffold */
-  // The APPLICATIONS and ROUTINES orbits carry no domain data — no integration
-  // is connected and no routine engine exists. They are drawn as an explicitly
-  // offline scaffold (dimmed, unlabelled, non-interactive) so the semantic
-  // layers of the accepted P3.1 composition survive without fabricating data.
-
-  function buildScaffold() {
-    const dense = window.innerWidth > 760;
-
-    const rg = layers.rings;
-    rg.textContent = '';
-    el('circle', { class: 'ring apps spin', cx: CX, cy: CY, r: R_APPS }, rg);
-    el('circle', { class: 'ring routines', cx: CX, cy: CY, r: R_RT }, rg);
-    el('circle', { class: 'ring memory', cx: CX, cy: CY, r: R_MEM }, rg);
-
-    const lg = layers.labels;
-    lg.textContent = '';
-    const lbl = (r, cls, txt) => {
-      const t = el('text', { class: `ring-label ${cls}`, x: CX, y: CY - r + 22 }, lg);
-      t.textContent = txt;
-    };
-    lbl(R_APPS, 'apps', 'Applications');
-    lbl(R_RT, 'routines', 'Routines');
-    lbl(R_MEM, 'memory', 'Memory');
-
-    const ag = layers.apps;
-    ag.textContent = '';
-    const nApps = 16;
-    for (let i = 0; i < nApps; i++) {
-      const a = -Math.PI / 2 + 0.19 + (i / nApps) * Math.PI * 2;
-      const g = el(
-        'g',
-        {
-          class: 'app-badge dim',
-          transform: `translate(${(CX + Math.cos(a) * R_APPS).toFixed(1)} ${(CY + Math.sin(a) * R_APPS).toFixed(1)})`,
-          'aria-hidden': 'true',
-        },
-        ag,
-      );
-      el('path', { class: 'hex', d: hexPath(0, 0, 15) }, g);
-      const t = el('text', { class: 'g', y: 0.5 }, g);
-      t.textContent = APP_GLYPHS[i % APP_GLYPHS.length];
-    }
-
-    const rt = layers.rt;
-    rt.textContent = '';
-    const nRt = 30;
-    for (let i = 0; i < nRt; i++) {
-      const a = -Math.PI / 2 + 0.11 + (i / nRt) * Math.PI * 2;
-      el(
-        'circle',
-        {
-          class: 'rt-node',
-          cx: (CX + Math.cos(a) * R_RT).toFixed(1),
-          cy: (CY + Math.sin(a) * R_RT).toFixed(1),
-          r: 3.4,
-        },
-        rt,
-      );
-    }
-
-    // Particle core — accumulated context (blueprint §9.4).
-    const cg = layers.core;
-    cg.textContent = '';
-    const r1 = rng(0x9e3779b9);
-    const grains = dense ? 320 : 150;
-    for (let i = 0; i < grains; i++) {
-      const ang = r1() * Math.PI * 2;
-      const rad = Math.pow(r1(), 0.85) * (R_CORE - 10);
-      const roll = r1();
-      const fill = roll > 0.92 ? 'var(--action)' : roll > 0.85 ? 'var(--apps)' : 'var(--memory)';
-      el(
-        'circle',
-        {
-          class: 'core-dot',
-          cx: (CX + Math.cos(ang) * rad).toFixed(1),
-          cy: (CY + Math.sin(ang) * rad).toFixed(1),
-          r: (0.5 + r1() * 1.4).toFixed(2),
-          fill,
-          opacity: (0.24 + r1() * 0.45).toFixed(2),
-        },
-        cg,
-      );
-    }
-    const r2 = rng(0x1234abcd);
-    for (let i = 0; i < 22; i++) {
-      const a1 = r2() * Math.PI * 2;
-      const a2 = a1 + (r2() - 0.5) * 1.1;
-      const rr1 = r2() * (R_CORE - 16);
-      const rr2 = r2() * (R_CORE - 16);
-      el(
-        'line',
-        {
-          class: 'core-link',
-          x1: (CX + Math.cos(a1) * rr1).toFixed(1),
-          y1: (CY + Math.sin(a1) * rr1).toFixed(1),
-          x2: (CX + Math.cos(a2) * rr2).toFixed(1),
-          y2: (CY + Math.sin(a2) * rr2).toFixed(1),
-        },
-        cg,
-      );
-    }
-  }
-
-  /**
-   * Ambient memory field — the accepted P3.1 dot lattice, kept at its original
-   * density. Each project brightens a wedge whose lit depth tracks its REAL
-   * capture count; the real capture nodes are then drawn on top of that wedge,
-   * so the accepted visual and the live data are the same statement.
-   *
-   * ~6.5k dots would be 6.5k SVG elements, which makes every pan re-raster an
-   * enormous layer. They are batched into three <path> elements — one per
-   * opacity tier — so the field costs three nodes instead of thousands.
-   */
-  function buildMemoryField(clusters) {
-    const memG = layers.mem;
-    memG.textContent = '';
-    const dense = window.innerWidth > 760;
-    const rr = rng(0xbeef1);
-    const ARCS = dense ? 22 : 12;
-    const SPACING = dense ? 5 : 9;
-    const rIn = R_CORE + 12;
-    const rOut = R_MEM - 12;
-    const HALF = GEO.WEDGE_HALF;
-    const tiers = ['', '', ''];
-    // A circle as a path: two half-arcs. Reliable across renderers.
-    const dot = (x, y, r) =>
-      `M${(x - r).toFixed(1)} ${y.toFixed(1)}` +
-      `a${r} ${r} 0 1 0 ${(r * 2).toFixed(2)} 0` +
-      `a${r} ${r} 0 1 0 ${(-r * 2).toFixed(2)} 0Z`;
-
-    for (let a = 0; a < ARCS; a++) {
-      const radius = rIn + (a / (ARCS - 1)) * (rOut - rIn);
-      const step = SPACING / radius;
-      for (let ang = 0; ang < Math.PI * 2 - 1e-6; ang += step) {
-        let boost = 0;
-        for (const c of clusters) {
-          const d = Math.abs(((ang - c.angle + Math.PI) % (Math.PI * 2)) - Math.PI);
-          if (d < HALF && a < c.lit) boost = Math.max(boost, 1 - d / HALF);
-        }
-        const R = radius + (rr() - 0.5) * 2.4;
-        const x = CX + Math.cos(ang) * R;
-        const y = CY + Math.sin(ang) * R;
-        const jitter = rr();
-        const tier = boost > 0.05 ? (boost > 0.5 ? 2 : 1) : jitter > 0.55 ? 1 : 0;
-        tiers[tier] += dot(x, y, boost > 0.05 ? 1.5 + boost * 0.7 : 1);
-      }
-    }
-    [0.2, 0.32, 0.62].forEach((opacity, i) => {
-      if (tiers[i]) el('path', { class: 'mem-dot', d: tiers[i], opacity }, memG);
-    });
-  }
-
   /* ---------------------------------------------------------- data render */
+  //
+  // T3.1: no offline scaffold and no fabricated density. The field draws only
+  // real objects — the Workspace root, its projects, their captured context —
+  // and real or genuinely computed edges. A sparse workspace looks sparse (§5).
+
+  /** Project identity hue index (mod the bounded palette), by deterministic
+   *  project order. A structural placeholder — the assignment rule and >N
+   *  overflow behaviour are deferred (blueprint Q1). */
+  function projectHueIndex(index) {
+    const order = [...index.nodes.values()]
+      .filter((n) => n.type === 'project')
+      .sort(
+        (a, b) =>
+          String(a.createdAt).localeCompare(String(b.createdAt)) || a.id.localeCompare(b.id),
+      );
+    return new Map(order.map((p, i) => [p.id, (i % 8) + 1]));
+  }
 
   function renderGraph(graph) {
     state.graph = graph;
@@ -317,14 +156,7 @@ export function createGraphView(opts) {
     for (const id of [...state.collapsed]) if (!state.index.nodes.has(id)) state.collapsed.delete(id);
     if (state.selectedId && !state.index.nodes.has(state.selectedId)) state.selectedId = null;
 
-    const clusters = [];
-    for (const n of state.index.nodes.values()) {
-      if (n.type !== 'project') continue;
-      const p = state.pos.get(n.id);
-      if (!p) continue;
-      clusters.push({ angle: p.angle, lit: (state.index.childrenOf.get(n.id) ?? []).length });
-    }
-    buildMemoryField(clusters);
+    const projHue = projectHueIndex(state.index);
 
     layers.edges.textContent = '';
     layers.nodes.textContent = '';
@@ -365,20 +197,25 @@ export function createGraphView(opts) {
           transform: `translate(${p.x.toFixed(1)} ${p.y.toFixed(1)})`,
           'data-id': n.id,
           'data-type': n.type,
-          'data-accent': meta.accent,
           role: n.type === 'project' || n.kind === 'workspace' ? 'button' : 'presentation',
           'aria-label': `${meta.label}: ${n.title || 'untitled'}`,
         },
         layers.nodes,
       );
       if (n.type === 'project' || n.kind === 'workspace') g.setAttribute('tabindex', '0');
+      // Project identity hue, applied additively (§5.4); the CSS falls back to
+      // neutral where --proj is unset (every non-project node).
+      if (n.type === 'project' && projHue.has(n.id)) {
+        g.style.setProperty('--proj', `var(--proj-${projHue.get(n.id)})`);
+      }
 
       el('circle', { class: 'hit', r: Math.max(14, meta.r * 2.6), fill: 'transparent' }, g);
 
       if (n.kind === 'workspace') {
-        el('path', { class: 'corehex', d: hexPath(0, 0, 26), 'vector-effect': 'non-scaling-stroke' }, g);
-        const t = el('text', { class: 'core-label', y: 44 }, g);
-        t.textContent = 'CONTEXT.CORE';
+        el('circle', { class: 'coremark', r: 24, 'vector-effect': 'non-scaling-stroke' }, g);
+        el('circle', { class: 'coremark dotc', r: 5 }, g);
+        const t = el('text', { class: 'core-label', y: 42 }, g);
+        t.textContent = 'WORKSPACE';
       } else if (n.type === 'project') {
         el('circle', { class: 'disc', r: meta.r, 'vector-effect': 'non-scaling-stroke' }, g);
         el('circle', { class: 'halo', r: meta.r + 7, 'vector-effect': 'non-scaling-stroke' }, g);
@@ -400,20 +237,37 @@ export function createGraphView(opts) {
 
     paint();
 
-    // On a narrow viewport the outer decorative orbits would otherwise fill the
-    // frame and leave the real graph a miniature in the middle. Frame the
-    // context itself once, on first load.
+    // Frame the real content once on first load. With no decorative orbits to
+    // fill the field, the graph is what sizes it — at every viewport.
     if (!framed && state.pos.size > 1) {
       framed = true;
-      if (window.innerWidth <= 720) fitContent(0);
+      fitContent(0);
     }
   }
 
-  /** Frame the real graph (core + projects + memory band), not the scaffold. */
+  /** Frame the real graph — workspace, projects and their context — so it is the
+   *  dominant surface of the central field, with room to breathe and clear of
+   *  the docked control panel. Pure view framing: the deterministic layout, the
+   *  graph data and the geometry constants are untouched. */
   function fitContent(ms = 420) {
     const pts = [...state.pos.values()];
     if (!pts.length) return;
-    const target = focusTransform(boundsOf(pts, 46), viewRect(), 3.2);
+    const v = viewRect();
+    let target;
+    if (window.innerWidth > 1200) {
+      // Full command-centre composition. Inset the frame for breathing room and
+      // bias it downward so the upper cluster clears the top-right panel; a
+      // small content pad keeps labels off the edge. The high scale ceiling
+      // lets the existing content actually fill the field instead of capping it.
+      const padX = v.w * 0.06;
+      const padT = v.h * 0.135;
+      const padB = v.h * 0.05;
+      const framed = { x: v.x + padX, y: v.y + padT, w: v.w - padX * 2, h: v.h - padT - padB };
+      target = focusTransform(boundsOf(pts, 26), framed, 4);
+    } else {
+      // Laptop drawers / mobile stack — framing unchanged.
+      target = focusTransform(boundsOf(pts, 80), v, 1.85);
+    }
     fitK = target.k;
     animateTo(target, ms);
   }
@@ -490,7 +344,7 @@ export function createGraphView(opts) {
 
     tip.innerHTML = '';
     const kind = document.createElement('span');
-    kind.className = `tk ${meta.accent}`;
+    kind.className = 'tk'; // class is the label's text, not a colour
     kind.textContent = meta.label;
     const title = document.createElement('strong');
     title.textContent = n.title || truncate(n.snippet, 40) || 'untitled';
@@ -704,12 +558,9 @@ export function createGraphView(opts) {
   }
 
   function resetView() {
-    if (window.innerWidth <= 720) {
-      fitContent();
-    } else {
-      fitK = 1;
-      animateTo({ k: 1, tx: 0, ty: 0 });
-    }
+    // The real content frames the field — there is no meaningful identity view
+    // now that the decorative orbits are gone.
+    fitContent();
   }
 
   function zoomBy(factor) {
@@ -726,14 +577,6 @@ export function createGraphView(opts) {
     } else {
       paint();
     }
-  }
-
-  function setScaffold(layer, enabled) {
-    state.scaffold[layer] = enabled;
-    const group = layer === 'apps' ? layers.apps : layers.rt;
-    const ring = layers.rings.querySelector(layer === 'apps' ? '.ring.apps' : '.ring.routines');
-    const label = layers.labels.querySelector(layer === 'apps' ? '.ring-label.apps' : '.ring-label.routines');
-    for (const node of [group, ring, label]) if (node) node.classList.toggle('off', !enabled);
   }
 
   function toggleCollapse(id) {
@@ -766,16 +609,17 @@ export function createGraphView(opts) {
     focus(id);
   }
 
-  function setMatches(ids) {
+  /** Highlight a set of nodes. `spotlight` attenuates the rest of the field in
+   *  place (§5.7) — search sets it; a single post-capture highlight does not. */
+  function setMatches(ids, { spotlight = false } = {}) {
     state.matches = new Set(ids);
+    svg.classList.toggle('searching', spotlight && state.matches.size > 0);
     paint();
   }
 
   const resize = () => applyTransform();
   window.addEventListener('resize', resize);
 
-  buildScaffold();
-  buildMemoryField([]);
   applyTransform();
 
   return {
@@ -785,13 +629,11 @@ export function createGraphView(opts) {
     resetView,
     zoomBy,
     setTypeFilter,
-    setScaffold,
     toggleCollapse,
     expandAll,
     collapseAll,
     revealAndFocus,
     setMatches,
-    rebuildScaffold: buildScaffold,
     fitContent,
     get selectedId() {
       return state.selectedId;
