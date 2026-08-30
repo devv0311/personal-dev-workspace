@@ -9,15 +9,20 @@ import {
   auditWriter,
   outboxWriter,
 } from '../persistence/writers.pg.ts';
+import { makeLexicalRetrievalProvider } from '../retrieval/lexical.pg.ts';
 
 export function buildContainer(uow = db) {
   const objects = makeObjectRepository(uow);
   const relationships = makeRelationshipRepository(uow);
   const scopeResolver = makeScopeResolver(uow);
+  // The RetrievalProvider seam (P2.6 §11). Swapping lexical → semantic changes
+  // this line and adapters/retrieval/ only.
+  const retrieval = makeLexicalRetrievalProvider(uow);
   return {
     uow,
     objects,
     relationships,
+    retrieval,
     scopeResolver,
     activity: activityWriter,
     audit: auditWriter,

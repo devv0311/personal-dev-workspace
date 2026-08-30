@@ -37,4 +37,15 @@ export const config = {
     : (process.env.DATABASE_URL ?? 'postgres://localhost:5432/devworkspace'),
   workerPollIntervalMs: Number(process.env.WORKER_POLL_INTERVAL_MS ?? 1000),
   devAuthEnabled: (process.env.DEV_AUTH_ENABLED ?? 'true') === 'true',
+
+  // --- P3.4 AI layer -------------------------------------------------------
+  // The Context API service token authenticates the CALLER (the assistant
+  // service). It never conveys a user identity — the end user's own credential
+  // is forwarded separately and validated by the core (P2.6 §14.1, INV-4a).
+  contextApiServiceToken: process.env.CONTEXT_API_SERVICE_TOKEN ?? 'dev-assistant-service-token',
+  assistantPort: Number(process.env.ASSISTANT_PORT ?? 4178),
+  /** Where the assistant reaches the core's Context API (its ONLY data path). */
+  coreContextApiUrl: process.env.CORE_CONTEXT_API_URL ?? 'http://127.0.0.1:4177',
+  /** Browser origin allowed to call the assistant in dev. */
+  assistantAllowedOrigin: process.env.ASSISTANT_ALLOWED_ORIGIN ?? 'http://localhost:4177',
 } as const;

@@ -13,7 +13,8 @@
     "dev:core": "node src/adapters/http/server.ts",
     "dev:worker": "node src/worker/index.ts",
     "typecheck": "tsc --noEmit",
-    "test": "NODE_ENV=test node --test --test-concurrency=1 'test/**/*.test.ts' 'test/**/*.test.js'"
+    "test": "NODE_ENV=test node --test --test-concurrency=1 'test/**/*.test.ts' 'test/**/*.test.js'",
+    "dev:assistant": "node assistant/index.ts"
   },
   "dependencies": {
     "pg": "^8.13.1"

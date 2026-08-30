@@ -45,9 +45,11 @@ npm run migrate               # npm run migrate -- --status  to inspect
 # 6. seed deterministic development data
 npm run seed
 
-# 7. start the two processes (separate terminals)
+# 7. start the processes (separate terminals)
 npm run dev:core              # http://localhost:4177
-npm run dev:worker            # drains the transactional outbox
+npm run dev:worker
+npm run dev:assistant   # P3.4 — Zone B; runs on the deterministic fake unless
+                        # ANTHROPIC_API_KEY is set. Holds no DB credential.            # drains the transactional outbox
 
 # 8. tests  (uses devworkspace_test; drops & recreates its schema each run)
 npm test
@@ -345,6 +347,105 @@ dashboard DOM, and a direct API probe for one of her objects still 404s).
 Rendered at 2048 / 1600 / 1140 / 390 with no overflow; visual composition is
 byte-for-byte the same as P3.2 except the two renamed preview strings.
 Evidence: `docs/screenshots/p3.3/`.
+
+## AI layer (P3.4)
+
+The first AI layer over the persisted context: **ask a question → retrieve real
+context → grounded answer → visible provenance → navigate to the source object**,
+plus summarization and task extraction on the same pipeline.
+
+The architecture was **not designed here** — P2.3/P2.5/P2.6 already specified it
+(trust chain, Context API, `RetrievalProvider` seam, `LLMProvider` port, no
+automatic mutations). P3.4 implements it. Decisions and their rationale:
+`docs/phase-3/P3.4-ai-layer-decisions.md`.
+
+### The trust chain, as built
+
+```
+User  →  Assistant (Zone B, NO datastore credential)  →  Context API  →  Context Engine (trusted)  →  PostgreSQL
+             untrusted generator                            two credentials      the single VisibilityPolicy
+```
+
+- **The assistant has no database path.** Not by convention — `test/assistant-boundary.test.ts`
+  walks its real module graph from the entry point and fails if anything in it
+  imports `pg`, reaches `adapters/persistence`, or touches the pool. It also
+  asserts the only core URL it ever calls is `/ctx/context-set`.
+- **Two credentials on the Context API** (P2.6 §14.1): a *service token*
+  authenticates the assistant as a caller and conveys no identity; the *end-user
+  credential* is relayed verbatim and validated by the core, which derives the
+  principal from it alone. Service-token-only is rejected; a principal in the
+  body is ignored. Both tested.
+- **The assistant cannot write.** Task creation goes back through the core's
+  ordinary authenticated write path, initiated by the user and attributed to the
+  user (INV-8).
+
+### Retrieval — reusing what already existed
+
+`object_fts` has been maintained by the outbox worker since P2.7 and had **never
+been read**. It now has its first consumer, behind the `RetrievalProvider` seam.
+
+There is **no vector store and no embedding model**: P2.5 selected lexical-only
+MVP retrieval with this seam as the upgrade path. Semantic behaviour comes from
+*query understanding* (question → intent + retrieval terms) ahead of retrieval.
+The port is storage-neutral by construction, and a second implementation
+(`InMemoryRetrievalProvider`) is kept green so the seam cannot rot — it enforces
+the same visibility rule through `canSee` rather than SQL, which is what proves
+"the provider pre-restricts to the scope" is a property of the *contract*.
+
+One defect found by running the real system: `websearch_to_tsquery` ANDs bare
+terms, so "why did we choose token bucket?" matched nothing and the answer fell
+back to recency — confidently, about the wrong note. Terms are now OR-ed with
+`ts_rank` discriminating.
+
+### Grounding and provenance — the model is untrusted
+
+Everything the model returns is re-validated against the evidence actually
+supplied:
+
+| Model does | System does |
+|---|---|
+| cites a ref not in the evidence | citation is **dropped** — a hallucinated citation cannot be displayed |
+| proposes a task from an invented source | text kept, **attribution removed** — no false provenance |
+| answers with evidence but cites nothing | marked **ungrounded** in the UI, not presented as fact |
+| returns prose instead of JSON | treated as a **provider failure**, not an answer |
+| context retrieval fails | turn **stops** — `Unavailable` is distinct from an empty set; no answer from priors |
+
+Every evidence row in the panel is a real object id, so clicking it is the same
+`revealAndFocus` the rest of the command center uses — the answer navigates back
+into the graph.
+
+### Evaluation
+
+`test/assistant-eval.test.ts` is a labelled set of realistic developer-context
+questions scored on seven dimensions, run against the deterministic provider so
+a regression means the *pipeline* changed:
+
+```
+intent 9/9 · retrieval 6/6 · index recall 4/4 · provenance 9/9
+grounding 9/9 · authorization 2/2 · extraction 1/1
+```
+
+`authorization`, `provenance` and `grounding` are asserted at **100%** — they are
+invariants, not quality scores. `intent` and `retrieval` have floors. **Index
+recall is measured separately from citation**: the first version of this eval
+scored the AND-bug case as passing because the right note was cited via the
+recency fallback, which hid the defect entirely.
+
+### UI
+
+An **Ask Context** panel in the accepted HUD language (same treatment as the
+graph control panel), reachable from the left rail or from the inspector's
+"Ask about this" — which scopes the question to the selected object. It shows the
+grounding state, the answer, evidence rows with their layer/rank/relationship
+provenance, and inert task proposals with a per-item **Create**. Nothing is
+created until that button is pressed. The P3.1–P3.3 visual system is unchanged.
+
+### Provider
+
+`LLMProvider` port. Default is a **deterministic fake** — that is what makes the
+boundary testable. Setting `ANTHROPIC_API_KEY` activates a real adapter behind
+the same port (no new dependency; uses global `fetch`). Swapping providers must
+not change the authorization, provenance or grounding results.
 
 ## Deferred (documented, not built here)
 
