@@ -30,6 +30,7 @@ Stable branch: `main`. Integration branch: `develop`.
 | P3.1 — Static Visual Shell | `app/src/adapters/web/`, `Design_Dashboard_Aesthetic_Claude_Blueprint.md` | COMPLETED | 2026-08-29 | PR #13 → `main` |
 | P3.2 — Interactive Second-Brain Graph | `app/src/application/context-graph.ts`, `app/src/adapters/web/graph-*.js` | COMPLETED | 2026-08-30 | PR #14 → `main` |
 | P3.3 — Dashboard ↔ Graph Integration | `app/src/adapters/web/graph-model.js`, `app/src/adapters/web/app.js` | COMPLETED | 2026-08-30 | PR #15 → `main` |
+| T3.1 — Visual Shell (blueprint-reconciled) | `app/src/adapters/web/` — token system, rails, Context Field framing, inspector relationship rows | COMPLETED | 2026-08-30 | PR #17 → `main` |
 
 ## Notes
 

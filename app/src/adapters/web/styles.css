@@ -1,20 +1,23 @@
 /* =============================================================================
-   P3.1 — Static Visual Shell, calibrated to the RUBRIC reference images.
-   Design authority: the supplied reference screenshots, then
-   Design_Dashboard_Aesthetic_Claude_Blueprint.md.
+   T3.1 — Visual Shell, reconciled against
+   Design_Dashboard_Aesthetic_Claude_Blueprint.md (the authority).
 
-   Reference read:
-   - Pure-black canvas. The rails are NOT boxed panels — they are borderless
-     typographic sections divided by hairline rules, sitting directly on black.
-   - The centre orbital visualization is huge and dominant; it bleeds toward
-     the rails. There is no permanent inspector panel — detail slides up only
-     on selection.
-   - Compact centred header: small product mark + subtitle + a row of tiny
-     icon controls; thin orange-outline pill buttons at top-right; a 1px
-     orange hairline across the very top edge.
-   - Big orange metric numbers; very small tightly-tracked uppercase labels;
-     monospace for times / ids / status.
-   - Skill-deck items are the only real "cards".
+   What this revision establishes / corrects (blueprint §13 deviations 1–5):
+   1. Colour: `--apps` / `--memory` / `--routines` retired. One action accent
+      doing only three jobs (now/next · action · current focus); a four-tier
+      greyscale contrast ladder; a bounded, token-named categorical set
+      (`--proj-1..8`) reserved for Project identity and applied additively —
+      class is carried in text, never by hue alone (§4.5, §4.13, §5.4, Q1).
+   2. The offline APPLICATIONS / ROUTINES orbits are removed, not dimmed (§5.11).
+   3. Ambient / orbital rotation is gone; nothing continuous moves (§7).
+   4. Retired reference widgets (Skills Deck, Routines Monitor, Micro Apps
+      launchers, "Today's mix") are not recreated. Sparse rails are correct
+      (§4.1, §12, Q5).
+   5. Relationship rows carry verb + direction + confidence as text and an
+      expandable slot for provenance (§5.3, §6.4, Q7).
+
+   The command-centre composition, the interactive graph (P3.2) and the
+   cross-surface object identity (P3.3) are preserved unchanged.
    ========================================================================== */
 
 :root {
@@ -25,18 +28,30 @@
   --hair-2:        rgba(255, 255, 255, 0.11);
   --hair-faint:    rgba(255, 255, 255, 0.045);
 
-  --ink:           #ececee;   /* primary */
-  --ink-dim:       #9aa0a7;   /* secondary */
-  --ink-faint:     #62686f;   /* metadata */
-  --ink-ghost:     #3a3f45;
+  /* Four-tier contrast ladder — hierarchy from size / weight / opacity, not hue */
+  --ink:           #ececee;   /* 1 — the one value that matters, at large size */
+  --ink-dim:       #9aa0a7;   /* 2 — primary content */
+  --ink-faint:     #6b7178;   /* 3 — labels, chrome */
+  --ink-ghost:     #565c64;   /* 4 — ambient metadata; faint but legible */
 
-  --action:        #ff7a1a;   /* primary action / active */
+  /* The single accent. Three jobs only: now/next, action, current focus. */
+  --action:        #ff7a1a;
   --action-2:      #ff9147;
-  --apps:          #37b7ff;   /* applications / external */
-  --memory:        #a97cff;   /* memory / context */
-  --routines:      #f5b53d;   /* routines / automation */
+
+  /* Distinct signal for error / blocker — always paired with a word (§4.5). */
   --error:         #ff5c78;
   --ok:            #55d6a0;
+  --warn:          #f5b53d;
+
+  /* Keyboard focus — an accessibility indicator, not a data channel (§8.2). */
+  --focus:         #4a90e2;
+
+  /* Project identity palette — bounded, named, reserved for Projects only,
+     and kept clear of the accent / error / ok hues so colour never doubles as
+     a state. Assigned by project order (mod 8) as a structural placeholder;
+     the final assignment rule and >N overflow behaviour are deferred (Q1). */
+  --proj-1: #5b9dd6; --proj-2: #6bbfae; --proj-3: #a98cd9; --proj-4: #d081b0;
+  --proj-5: #b6c05f; --proj-6: #5fb0c4; --proj-7: #7f8c99; --proj-8: #8f9bd8;
 
   --s1: 4px; --s2: 8px; --s3: 12px; --s4: 16px; --s5: 22px; --s6: 32px;
 
@@ -44,7 +59,8 @@
   --font-mono: "JetBrains Mono", ui-monospace, "SF Mono", Menlo, Consolas, monospace;
 
   --header-h: 46px;
-  --rail-w: clamp(248px, 21.5%, 340px);
+  /* Rails are a true 23% band through the primary desktop range (§4.1). */
+  --rail-w: clamp(256px, 23%, 384px);
 
   color-scheme: dark;
 }
@@ -61,12 +77,12 @@ body {
   line-height: 1.45;
   -webkit-font-smoothing: antialiased;
 }
-/* 1px orange hairline across the very top edge (reference B) */
+/* A 1px structural hairline at the very top edge — division, not accent. */
 body::before {
   content: "";
-  position: fixed; inset: 0 0 auto 0; height: 2px;
-  background: linear-gradient(90deg, transparent, var(--action) 18%, var(--action) 82%, transparent);
-  opacity: 0.7; z-index: 50; pointer-events: none;
+  position: fixed; inset: 0 0 auto 0; height: 1px;
+  background: var(--hair-2);
+  z-index: 50; pointer-events: none;
 }
 
 /* ---- shared type primitives ---------------------------------------------- */
@@ -77,10 +93,11 @@ body::before {
   color: var(--ink-faint);
 }
 .mono { font-family: var(--font-mono); letter-spacing: 0.01em; }
+/* Tier 1: the one number that matters, large — white, not accent. */
 .metric {
   font: 300 27px/0.95 var(--font-mono);
   letter-spacing: -0.01em;
-  color: var(--action);
+  color: var(--ink);
 }
 .metric.sm { font-size: 20px; }
 .tag {
@@ -90,15 +107,16 @@ body::before {
   border: 1px solid var(--hair);
   border-radius: 2px; padding: 2px 4px;
 }
-.tag.preview { color: var(--memory); border-color: rgba(169,124,255,0.32); }
+/* PREVIEW / OFFLINE stay legible as words — no colour meaning (§8.3). */
+.tag.preview { color: var(--ink-faint); border-color: var(--hair-2); }
 .tag.offline { color: var(--ink-ghost); }
 
-.dot { width: 5px; height: 5px; border-radius: 50%; display: inline-block; flex: none; }
-.dot.action{background:var(--action)} .dot.apps{background:var(--apps)}
-.dot.memory{background:var(--memory)} .dot.routines{background:var(--routines)}
-.dot.error{background:var(--error)} .dot.ok{background:var(--ok)} .dot.idle{background:var(--ink-ghost)}
+.dot { width: 5px; height: 5px; border-radius: 50%; display: inline-block; flex: none; background: var(--ink-dim); }
+.dot.action { background: var(--action); }
+.dot.error  { background: var(--error); }
+.dot.ok     { background: var(--ok); }
 
-/* ---- borderless HUD section (replaces the old boxed .panel) ------------- */
+/* ---- borderless HUD section (typographic region on a shared ground) ----- */
 .sect { display: flex; flex-direction: column; }
 .sect + .sect { border-top: 1px solid var(--hair-faint); margin-top: var(--s4); padding-top: var(--s4); }
 .sect > header {
@@ -110,7 +128,7 @@ body::before {
 .sect > header .glyph { color: var(--ink-dim); font-size: 11px; line-height: 1; }
 .sect > header .meta { margin-left: auto; }
 
-/* pill controls (reference: thin orange-outline pills) ------------------- */
+/* pill controls — an action affordance, so the accent is earned (§4.5 job 2) */
 .pill {
   font: 600 9px/1 var(--font-ui);
   letter-spacing: 0.12em; text-transform: uppercase;
@@ -134,10 +152,11 @@ body::before {
 }
 .iconbtn:hover { color: var(--ink); }
 
-:focus-visible { outline: 1px solid var(--apps); outline-offset: 2px; }
+:focus-visible { outline: 1px solid var(--focus); outline-offset: 2px; }
 
 /* =============================================================================
-   LAYOUT
+   LAYOUT — command centre: restrained header, two intelligence rails,
+   a visually dominant Context Field between them (§4.1).
    ========================================================================== */
 .shell {
   display: grid;
@@ -150,7 +169,7 @@ body::before {
 .skip-link { position: absolute; left: -999px; }
 .skip-link:focus { left: 10px; top: 10px; z-index: 60; background: var(--bg-2); padding: 6px 10px; border: 1px solid var(--hair-2); }
 
-/* ---- header: compact, centred identity + edge pills ------------------- */
+/* ---- header: compact, centred identity + edge controls --------------- */
 .header {
   grid-area: header;
   display: grid;
@@ -178,7 +197,7 @@ body::before {
 .dev-flag { font: 600 8px/1 var(--font-ui); letter-spacing: 0.13em; color: var(--ink-ghost); }
 .rail-toggle { display: none; }
 
-/* ---- rails: borderless, on pure black ------------------------------- */
+/* ---- rails: borderless typographic regions on the shared ground ----- */
 .rail {
   overflow-y: auto; overflow-x: hidden;
   padding: var(--s4) var(--s4) var(--s6);
@@ -188,8 +207,13 @@ body::before {
 .rail::-webkit-scrollbar-thumb { background: var(--hair-2); border-radius: 3px; }
 .rail.left  { grid-area: left; }
 .rail.right { grid-area: right; }
+/* A sparse rail is correct behaviour, not a defect to be padded (§4.1, §5.10). */
+.rail .rail-quiet {
+  color: var(--ink-ghost); font-size: 10px; line-height: 1.5;
+  padding: var(--s3) 0; border-top: 1px solid var(--hair-faint); margin-top: var(--s4);
+}
 
-/* ---- centre: the visualization dominates -------------------------- */
+/* ---- centre: the Context Field dominates -------------------------- */
 .center { grid-area: center; position: relative; min-width: 0; overflow: hidden; }
 .field-wrap { position: absolute; inset: 0; pointer-events: none; }
 .field-wrap > svg, .field-wrap .inspector, .field-wrap .legend-pill,
@@ -200,6 +224,9 @@ body::before {
 }
 .field-svg.grabbing { cursor: grabbing; }
 #viewport { will-change: transform; }
+/* Search spotlight: the field attenuates, matches stay in place (§5.7). */
+.field-svg.searching #g-nodes .gnode:not(.match):not(.sel) { opacity: 0.28; }
+.field-svg.searching #g-edges { opacity: 0.3; }
 
 .field-readout {
   position: absolute; font: 500 8.5px/1.5 var(--font-mono);
@@ -210,13 +237,15 @@ body::before {
 .legend-pill {
   position: absolute; bottom: 16px; left: 18px;
   display: flex; gap: var(--s3); align-items: center;
-  border: 1px solid rgba(255,122,26,0.4); border-radius: 999px;
+  border: 1px solid var(--hair-2); border-radius: 999px;
   padding: 5px 12px;
 }
-.legend-pill .li { display: flex; align-items: center; gap: 5px; font: 600 8px/1 var(--font-ui); letter-spacing: 0.12em; text-transform: uppercase; color: var(--ink-faint); }
-.legend-pill .sw { width: 7px; height: 7px; border-radius: 50%; }
-.legend-pill .sw.apps { background: var(--apps); } .legend-pill .sw.routines { background: var(--routines); }
-.legend-pill .sw.memory { background: var(--memory); } .legend-pill .sw.core { background: var(--action); }
+.legend-pill .li { display: flex; align-items: center; gap: 6px; font: 600 8px/1 var(--font-ui); letter-spacing: 0.12em; text-transform: uppercase; color: var(--ink-faint); }
+/* Size, not colour, separates the three structural kinds. */
+.legend-pill .sw { border-radius: 50%; background: var(--ink-dim); flex: none; }
+.legend-pill .sw.a { width: 9px; height: 9px; background: none; border: 1px solid var(--ink-dim); }
+.legend-pill .sw.b { width: 7px; height: 7px; }
+.legend-pill .sw.c { width: 4px; height: 4px; }
 
 .field-empty {
   position: absolute; inset: 0; display: grid; place-content: center;
@@ -225,56 +254,39 @@ body::before {
 .field-empty .big { font: 300 15px/1.3 var(--font-ui); color: var(--ink-dim); }
 
 /* ---- SVG field primitives ---------------------------------------- */
-/* Only real graph nodes are interactive. The orbit scaffold is inert. */
-#fsvg #f-rings, #fsvg #f-mem, #fsvg #f-core, #fsvg #f-apps,
-#fsvg #f-rt, #fsvg #f-labels, #fsvg #g-edges, #fsvg .hexfill { pointer-events: none; }
+#fsvg #g-edges, #fsvg .hexfill { pointer-events: none; }
 #fsvg .off { display: none; }
 
-.hexbg { fill: none; stroke: rgba(255,255,255,0.028); stroke-width: 1; }
-.ring { fill: none; stroke-width: 1; }
-.ring.apps     { stroke: rgba(55,183,255,0.28); }
-.ring.routines { stroke: rgba(245,181,61,0.30); }
-.ring.memory   { stroke: rgba(169,124,255,0.30); }
-.ring.spin     { transform-origin: center; animation: ringspin 240s linear infinite; }
-.ring-label {
-  font: 600 12px/1 var(--font-ui); letter-spacing: 0.32em; text-transform: uppercase;
-  text-anchor: middle;
-}
-.ring-label.apps { fill: rgba(55,183,255,0.85); }
-.ring-label.routines { fill: rgba(245,181,61,0.85); }
-.ring-label.memory { fill: rgba(169,124,255,0.85); }
+.gridbg { fill: rgba(255, 255, 255, 0.028); }
 
-.mem-dot { fill: var(--memory); }
-.core-link { stroke: rgba(169,124,255,0.10); stroke-width: 0.6; }
-
-.app-badge .hex { fill: rgba(10,12,16,0.85); stroke: rgba(55,183,255,0.5); stroke-width: 1.2; }
-.app-badge .g { fill: rgba(55,183,255,0.75); font: 600 10px/1 var(--font-mono); text-anchor: middle; dominant-baseline: central; }
-.app-badge.dim { opacity: 0.45; }
-.rt-node { fill: rgba(10,12,16,0.9); stroke: var(--routines); stroke-width: 1.1; }
+.mem-anchor { stroke: rgba(255, 255, 255, 0.08); stroke-width: 0.6; }
 
 /* ---- edges: real relationships only ------------------------------ */
 .edge-line { stroke-width: 1; transition: stroke 140ms, opacity 140ms; }
 .edge-line.structural { stroke: rgba(255,255,255,0.10); }
-.edge-line.anchor     { stroke: rgba(169,124,255,0.30); }
-.edge-line.authored   { stroke: rgba(55,183,255,0.38); stroke-dasharray: 4 3; }
+.edge-line.anchor     { stroke: rgba(255,255,255,0.16); }
+.edge-line.authored   { stroke: rgba(255,255,255,0.30); stroke-dasharray: 4 3; }
 .edge-line.mute       { opacity: 0.22; }
 .edge-line.hot        { stroke: rgba(255,122,26,0.75); stroke-width: 1.6; opacity: 1; }
 
-/* ---- nodes ------------------------------------------------------- */
+/* ---- nodes: one uniform mark per structural kind; class is in text ---- */
 .gnode { cursor: pointer; }
 .gnode .hit { pointer-events: all; }
 .gnode .halo { fill: none; stroke: transparent; stroke-width: 1; }
 .gnode .disc {
-  fill: rgba(10,12,16,0.92); stroke: rgba(255,122,26,0.55); stroke-width: 1.4;
+  fill: rgba(10,12,16,0.92);
+  /* Project identity hue, applied additively; neutral when unassigned. */
+  stroke: var(--proj, rgba(255,255,255,0.34)); stroke-width: 1.4;
   transition: stroke 130ms, fill 130ms;
 }
-.gnode .dot { fill: var(--memory); stroke: rgba(169,124,255,0.55); stroke-width: 1; opacity: 0.82; transition: opacity 130ms; }
-.gnode[data-accent="apps"] .dot { fill: var(--apps); stroke: rgba(55,183,255,0.6); }
-.gnode[data-accent="routines"] .dot { fill: var(--routines); stroke: rgba(245,181,61,0.6); }
-.gnode .corehex {
-  fill: rgba(255,122,26,0.12); stroke: var(--action); stroke-width: 1.4;
-  filter: drop-shadow(0 0 12px rgba(255,122,26,0.4));
+.gnode .dot {
+  fill: rgba(255,255,255,0.16); stroke: rgba(255,255,255,0.34); stroke-width: 1;
+  opacity: 0.82; transition: opacity 130ms;
 }
+/* Workspace root — a real entity, drawn as a ring + centre, named in product
+   vocabulary. No standing glow: illumination is reserved for the selection. */
+.gnode .coremark { fill: none; stroke: var(--ink-dim); stroke-width: 1.4; }
+.gnode .coremark.dotc { fill: var(--ink-dim); stroke: none; }
 .gnode .lbl {
   fill: var(--ink-dim); font-weight: 600; letter-spacing: 0.06em; text-anchor: middle;
   font-family: var(--font-ui);
@@ -287,41 +299,40 @@ body::before {
   opacity: 0; transition: opacity 140ms;
 }
 .gnode .count {
-  fill: var(--action); font-family: var(--font-mono); font-size: calc(8px / var(--zoom, 1));
+  fill: var(--ink-dim); font-family: var(--font-mono); font-size: calc(8px / var(--zoom, 1));
   letter-spacing: 0.06em; text-anchor: middle; opacity: 0.75; pointer-events: none;
   paint-order: stroke; stroke: #000; stroke-width: calc(2.5px / var(--zoom, 1));
 }
 .core-label {
-  fill: var(--action); font-family: var(--font-mono); font-weight: 600;
-  font-size: calc(9px / var(--zoom, 1)); letter-spacing: 0.1em; text-anchor: middle;
+  fill: var(--ink-faint); font-family: var(--font-mono); font-weight: 600;
+  font-size: calc(9px / var(--zoom, 1)); letter-spacing: 0.16em; text-anchor: middle;
   paint-order: stroke; stroke: #000; stroke-width: calc(3px / var(--zoom, 1)); stroke-linejoin: round;
   pointer-events: none;
 }
 
-/* hover / selection / relationship emphasis */
-/* The graph draws its own focus ring — a halo in the field's language, not a
-   browser outline box around the node's label. */
+/* hover / selection / relationship emphasis — the accent marks focus (§4.5 job 3) */
 #g-nodes .gnode:focus, #g-nodes .gnode:focus-visible { outline: none; }
-#g-nodes .gnode:focus-visible .halo { stroke: var(--apps); stroke-opacity: 0.9; }
+#g-nodes .gnode:focus-visible .halo { stroke: var(--focus); stroke-opacity: 0.9; }
 .gnode.hov .disc, .gnode:focus-visible .disc, .gnode.sel .disc {
   fill: rgba(255,122,26,0.16); stroke: var(--action);
   filter: drop-shadow(0 0 9px rgba(255,122,26,0.5));
 }
 .gnode.hov .lbl, .gnode.sel .lbl { fill: var(--ink); }
 .gnode.hov .dot, .gnode.sel .dot { opacity: 1; }
- /* Only the node under the cursor, the selection and search hits are labelled.
-    Labelling the whole neighbourhood buries the graph in text. */
 .gnode.hov .lbl.mem, .gnode.sel .lbl.mem, .gnode.match .lbl.mem { opacity: 1; }
 .gnode.sel .halo { stroke: rgba(255,122,26,0.55); }
-.gnode.sel .corehex { filter: drop-shadow(0 0 18px rgba(255,122,26,0.75)); }
+.gnode.sel .coremark { stroke: var(--action); }
+.gnode.sel .coremark.dotc { fill: var(--action); }
+.gnode.sel .core-label { fill: var(--action); }
+.gnode.sel .coremark:not(.dotc) { filter: drop-shadow(0 0 16px rgba(255,122,26,0.7)); }
 .gnode.rel .halo { stroke: rgba(255,122,26,0.28); }
 .gnode.rel .dot { opacity: 1; }
 .gnode.mute { opacity: 0.3; }
 .gnode.mute .lbl { fill: var(--ink-ghost); }
-.gnode.match .halo { stroke: var(--apps); stroke-opacity: 0.85; animation: matchpulse 1.4s ease-out 2; }
-.gnode.match .lbl { fill: var(--apps); }
+.gnode.match .halo { stroke: var(--focus); stroke-opacity: 0.85; animation: matchpulse 1.4s ease-out 2; }
+.gnode.match .lbl { fill: var(--focus); }
 .gnode.collapsed .disc { stroke-dasharray: 3 2; }
-.gnode.collapsed .count { opacity: 1; fill: var(--action-2); }
+.gnode.collapsed .count { opacity: 1; fill: var(--ink); }
 .gnode.sel .disc, .gnode.sel .dot { animation: selectpop 260ms ease-out 1; }
 
 @keyframes matchpulse {
@@ -339,22 +350,19 @@ body::before {
   position: absolute; top: 0; left: 0; z-index: 12;
   max-width: 260px; display: flex; flex-direction: column; gap: 2px;
   background: rgba(4,4,5,0.94); border: 1px solid var(--hair-2);
-  border-left: 2px solid var(--action);
+  border-left: 2px solid var(--hair-2);
   padding: 7px 10px; pointer-events: none;
   box-shadow: 0 8px 26px -12px #000;
 }
 .node-tip .tk {
   font: 600 8px/1 var(--font-ui); letter-spacing: 0.15em; text-transform: uppercase;
-  color: var(--action);
+  color: var(--ink-faint);
 }
-.node-tip .tk.memory { color: var(--memory); }
-.node-tip .tk.apps { color: var(--apps); }
-.node-tip .tk.routines { color: var(--routines); }
 .node-tip strong { font: 500 11.5px/1.3 var(--font-ui); color: var(--ink); overflow-wrap: anywhere; }
 .node-tip .tm { font: 500 9px/1.3 var(--font-mono); color: var(--ink-faint); letter-spacing: 0.03em; }
 .node-tip .ts { font: 400 10px/1.4 var(--font-ui); color: var(--ink-dim); margin-top: 2px; }
 
-/* ---- graph control panel (blueprint §14) -------------------------- */
+/* ---- graph control panel (blueprint §6) -------------------------- */
 .gctl {
   position: absolute; top: 30px; right: 18px; z-index: 11; width: 246px;
   background: rgba(3,3,4,0.9); border: 1px solid var(--hair-2);
@@ -385,9 +393,7 @@ body::before {
 }
 .results li:hover { background: rgba(255,255,255,0.04); }
 .results li.cur { border-left-color: var(--action); background: rgba(255,122,26,0.08); }
-.results .sw { width: 6px; height: 6px; border-radius: 50%; background: var(--memory); }
-.results .sw.context { background: var(--action); } .results .sw.core { background: var(--action); }
-.results .sw.apps { background: var(--apps); } .results .sw.routines { background: var(--routines); }
+.results .sw { width: 6px; height: 6px; border-radius: 50%; background: var(--ink-dim); }
 .results .rt { font: 400 10.5px/1.3 var(--font-ui); color: var(--ink); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .results .rk { font: 600 7.5px/1 var(--font-ui); letter-spacing: 0.1em; text-transform: uppercase; color: var(--ink-ghost); }
 
@@ -404,13 +410,7 @@ body::before {
 .chip .n { font-family: var(--font-mono); font-size: 8px; color: var(--ink-ghost); letter-spacing: 0; }
 .chip.on { color: var(--ink-dim); border-color: var(--hair-2); }
 .chip.on .sw { opacity: 1; }
-/* keyed by the semantic accent the graph paints the layer with */
-.chip.on.core .sw, .chip.on.context .sw { background: var(--action); }
-.chip.on.memory .sw { background: var(--memory); }
-.chip.on.routines .sw { background: var(--routines); }
-.chip.on.apps .sw { background: var(--apps); }
 .chip:not(.on) { opacity: 0.55; text-decoration: line-through; }
-.chip.scaffold { border-style: dashed; }
 
 .btnrow { display: flex; align-items: center; gap: 5px; flex-wrap: wrap; }
 .btnrow .pill { padding: 5px 9px; }
@@ -418,10 +418,9 @@ body::before {
 .zoomctl .mono { font-size: 9px; color: var(--ink-faint); min-width: 32px; text-align: center; }
 .zoomctl .iconbtn { width: 20px; height: 20px; border: 1px solid var(--hair); }
 
-/* ---- P3.4 assistant panel -----------------------------------------
-   Same HUD language as .gctl (pure black, hairline border, orange-outline
-   pills, tracked uppercase labels). It is an intelligence layer over the
-   existing graph, not a chat window bolted beside it. */
+/* ---- assistant panel (P3.4, pre-existing on this branch) ----------
+   Retokenised for T3.1 conformance only — its structure and behaviour are
+   unchanged. It uses the same HUD language as .gctl. */
 .askp {
   position: absolute; top: 30px; left: 18px; z-index: 11; width: 340px;
   max-height: calc(100% - 60px); display: flex; flex-direction: column;
@@ -435,7 +434,7 @@ body::before {
 }
 .askp > header .ct { margin-left: auto; font-size: 8.5px; color: var(--ink-ghost); letter-spacing: 0.06em; }
 .askbody { padding: var(--s2) 10px 10px; overflow-y: auto; scrollbar-width: thin; }
-.askscope { font-size: 9px; letter-spacing: 0.06em; color: var(--action); margin-bottom: 5px; }
+.askscope { font-size: 9px; letter-spacing: 0.06em; color: var(--ink-dim); margin-bottom: 5px; }
 .askform textarea {
   width: 100%; font: inherit; font-size: 11px; color: var(--ink);
   background: rgba(0,0,0,0.5); border: 1px solid var(--hair-2); border-radius: 2px;
@@ -448,13 +447,13 @@ body::before {
 #ask-status.ok { color: var(--ok); }
 
 .askout { margin-top: var(--s3); border-top: 1px solid var(--hair-faint); padding-top: var(--s3); }
-/* Grounding is stated, never implied — an ungrounded answer says so. */
+/* Grounding is stated in words, never implied by colour alone (§4.13). */
 .askgrounding {
   font: 600 8px/1 var(--font-ui); letter-spacing: 0.13em; text-transform: uppercase;
   margin-bottom: 6px;
 }
 .askgrounding.grounded { color: var(--ok); }
-.askgrounding.ungrounded { color: var(--routines); }
+.askgrounding.ungrounded { color: var(--warn); }
 .askanswer {
   margin: 0 0 var(--s3); color: var(--ink); font-size: 11px; line-height: 1.55;
   white-space: pre-wrap; overflow-wrap: anywhere;
@@ -467,28 +466,27 @@ body::before {
   border-top: 1px solid var(--hair-faint); padding: 5px 0; cursor: pointer; font: inherit; color: inherit;
 }
 .evlist li:first-child .ev { border-top: none; }
-.evlist .sw { width: 6px; height: 6px; border-radius: 50%; background: var(--memory); }
-.evlist .sw.context, .evlist .sw.core { background: var(--action); }
-.evlist .sw.apps { background: var(--apps); } .evlist .sw.routines { background: var(--routines); }
+.evlist .sw { width: 6px; height: 6px; border-radius: 50%; background: var(--ink-dim); }
 .evlist .et { color: var(--ink); font-size: 10.5px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .evlist .ev:hover .et { color: var(--action); }
 .evlist .ek { font: 600 7.5px/1 var(--font-ui); letter-spacing: 0.1em; text-transform: uppercase; color: var(--ink-ghost); }
 .evlist .ewhy { grid-column: 2 / -1; font: 500 8px/1.3 var(--font-mono); color: var(--ink-ghost); letter-spacing: 0.03em; margin-top: -2px; }
 
-.tasklist li { border-left: 2px solid var(--routines); padding: 5px 0 5px 9px; }
+.tasklist li { border-left: 2px solid var(--ink-faint); padding: 5px 0 5px 9px; }
 .tasklist .tt { color: var(--ink); font-size: 10.5px; display: block; overflow-wrap: anywhere; }
 .tasklist .tsrc { font: 500 8px/1.3 var(--font-mono); color: var(--ink-ghost); display: block; margin-top: 2px; }
 .tasklist .trow { display: flex; gap: 5px; align-items: center; margin-top: 5px; }
 .tasklist .trow .created { font: 600 8px/1 var(--font-ui); letter-spacing: 0.12em; text-transform: uppercase; color: var(--ok); }
 
-/* ---- inspector: slide-up overlay, only on selection ------------- */
+/* ---- inspector: slide-up overlay, only on selection; three concerns
+   on distinct surfaces; grows with its content (§6.4, Q7) ----------- */
 .inspector {
   position: absolute; left: 0; right: 0; bottom: 0;
   background: linear-gradient(180deg, rgba(5,5,6,0.75), rgba(5,5,6,0.97) 40%);
   backdrop-filter: blur(3px);
   border-top: 1px solid var(--hair-2);
   display: grid; grid-template-columns: 1fr 1fr; grid-template-rows: auto 1fr;
-  max-height: 40%;
+  max-height: 46%;
   transform: translateY(101%);
   transition: transform 200ms ease;
 }
@@ -506,13 +504,13 @@ body::before {
 
 .ctx-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
 .ctx-list li {
-  border-left: 2px solid var(--memory); padding: 4px 0 4px 10px;
+  border-left: 2px solid var(--hair-2); padding: 4px 0 4px 10px;
   overflow-wrap: anywhere;
 }
 .ctx-list h3 { margin: 0 0 1px; font: 500 11px/1.3 var(--font-ui); }
 .ctx-list p { margin: 0 0 3px; color: var(--ink-dim); font-size: 10.5px; white-space: pre-wrap; }
 .ctx-list .edge { display: inline-flex; gap: 5px; align-items: center; color: var(--ink-faint); }
-.ctx-list .edge code { font: 500 8.5px/1 var(--font-mono); color: var(--memory); border: 1px solid var(--hair); border-radius: 2px; padding: 1px 3px; }
+.ctx-list .edge code { font: 500 8.5px/1 var(--font-mono); color: var(--ink-dim); border: 1px solid var(--hair); border-radius: 2px; padding: 1px 3px; }
 .empty-ins { color: var(--ink-faint); padding: var(--s3) 0; font-size: 11px; }
 
 .meta-row { font-size: 8.5px; letter-spacing: 0.07em; color: var(--ink-ghost); margin-bottom: var(--s2); }
@@ -526,26 +524,45 @@ body::before {
   border: none; padding: 0; cursor: pointer; font: inherit; color: inherit;
 }
 .ctx-list .ctx-row:hover h3 { color: var(--action); }
-.rel-list { list-style: none; margin: 0 0 var(--s2); padding: 0; display: flex; flex-direction: column; gap: 3px; }
+
+/* Relationships: individually listed (never an aggregate count), each row
+   carrying verb + direction + confidence as text, with an expandable slot for
+   provenance and — later — contributing signals (§5.3, §6.4, Q7). */
+.rel-list { list-style: none; margin: 0 0 var(--s2); padding: 0; display: flex; flex-direction: column; }
+.rel-list li { padding: 5px 0; border-top: 1px solid var(--hair-faint); }
+.rel-list li:first-child { border-top: none; }
 .rel-list .rel-row {
-  display: grid; grid-template-columns: auto 10px 1fr; gap: 6px; align-items: center;
-  padding: 4px 0; border-top: 1px solid var(--hair-faint);
+  display: grid; grid-template-columns: auto 10px 1fr auto; gap: 6px; align-items: center;
+  width: 100%; text-align: left; background: transparent; border: none; padding: 0;
+  cursor: pointer; font: inherit; color: inherit;
 }
-.rel-list li:first-child .rel-row { border-top: none; }
 .rel-list .rel-row:hover:not(:disabled) .ot { color: var(--action); }
 .rel-list .rel-row:disabled { cursor: default; opacity: 0.5; }
 .rel-list code {
-  font: 500 8.5px/1 var(--font-mono); color: var(--memory);
+  font: 500 8.5px/1 var(--font-mono); color: var(--ink-dim);
   border: 1px solid var(--hair); border-radius: 2px; padding: 2px 4px;
 }
 .rel-list .ar { color: var(--ink-ghost); font-size: 10px; text-align: center; }
 .rel-list .ot { color: var(--ink); font-size: 10.5px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.rel-list .pv {
-  grid-column: 3; font: 500 8px/1 var(--font-mono); color: var(--ink-ghost);
-  letter-spacing: 0.04em; margin-top: -2px;
+.rel-list .conf {
+  font: 600 7.5px/1 var(--font-ui); letter-spacing: 0.09em;
+  text-transform: uppercase; color: var(--ink-faint); white-space: nowrap;
 }
+.rel-list .conf.inferred { color: var(--warn); }
+.rel-list .disclose {
+  margin-top: 3px; background: transparent; border: none; padding: 0; cursor: pointer;
+  font: 600 7.5px/1 var(--font-ui); letter-spacing: 0.1em; text-transform: uppercase;
+  color: var(--ink-ghost);
+}
+.rel-list .disclose:hover { color: var(--ink-dim); }
+.rel-list .rel-detail {
+  margin-top: 4px; padding-left: 8px; border-left: 1px solid var(--hair-2);
+  font: 500 8.5px/1.5 var(--font-mono); color: var(--ink-ghost); letter-spacing: 0.02em;
+}
+.rel-list .rel-detail div { overflow-wrap: anywhere; }
+
 .caphead { display: block; margin-top: var(--s4); }
-.captarget { font-size: 9px; letter-spacing: 0.06em; color: var(--action); margin-top: 4px; }
+.captarget { font-size: 9px; letter-spacing: 0.06em; color: var(--ink-dim); margin-top: 4px; }
 
 .cap-form label { display: block; margin: var(--s2) 0 3px; font-size: 10.5px; color: var(--ink-dim); }
 .cap-form input, .cap-form textarea {
@@ -556,6 +573,7 @@ body::before {
 .cap-form input::placeholder, .cap-form textarea::placeholder { color: var(--ink-ghost); }
 .cap-form textarea { min-height: 40px; }
 .cap-actions { display: flex; align-items: center; gap: var(--s3); margin-top: var(--s2); }
+/* Elevation reserved for pressable objects: raised means "run / open" (§4.9). */
 .btn-run {
   font: 600 9px/1 var(--font-ui); letter-spacing: 0.12em; text-transform: uppercase;
   color: #180a02; background: var(--action); border: none; border-radius: 2px;
@@ -566,19 +584,17 @@ body::before {
 #cap-status.ok { color: var(--ok); } #cap-status.err { color: var(--error); }
 
 /* =============================================================================
-   LEFT RAIL widgets
+   LEFT RAIL — "what you reach for": capture, current session, the state
+   of the work you are in (§4.1).
    ========================================================================== */
 .tool { display: grid; grid-template-columns: 16px 1fr 12px; gap: var(--s2); align-items: start; padding: 5px 0; }
 .tool + .tool { border-top: 1px solid var(--hair-faint); }
 .tool .ic { color: var(--ink-dim); font-size: 12px; line-height: 1.3; }
-.tool.apps .ic { color: var(--apps); }
 .tool .nm { color: var(--ink); font-size: 11.5px; }
 .tool .ds { color: var(--ink-faint); font-size: 10px; }
 .tool .ar { color: var(--ink-ghost); }
-.tool.off { opacity: 0.5; }
 .tool.click { cursor: pointer; }
 .tool.click:hover .nm { color: var(--action); }
-.addrow { color: var(--ink-faint); font: 600 9px/1 var(--font-ui); letter-spacing: 0.13em; text-transform: uppercase; padding-top: var(--s2); }
 
 .clock { display: flex; align-items: baseline; gap: var(--s2); }
 .clock .t { font: 300 24px/1 var(--font-mono); color: var(--action); letter-spacing: 0.01em; }
@@ -594,79 +610,34 @@ body::before {
 .qgrid i.done { background: rgba(255,255,255,0.24); border-color: transparent; }
 .qgrid i.now  { background: var(--action); border-color: var(--action); }
 
-.next-list { list-style: none; margin: var(--s2) 0 0; padding: 0; }
-.next-list li { display: flex; justify-content: space-between; gap: var(--s3); padding: 3px 0; font-size: 10.5px; color: var(--ink-dim); }
-.next-list li::before { content: "›"; color: var(--action); margin-right: 6px; }
-.next-list .tm { color: var(--ink-faint); font-family: var(--font-mono); font-size: 9.5px; margin-left: auto; }
-
 .pulse-name { font: 600 10px/1 var(--font-ui); letter-spacing: 0.1em; text-transform: uppercase; color: var(--ink); margin-bottom: var(--s2); }
-/* P3.3: linked to a real project — same identity the graph/inspector show */
 .pulse-name.linked { cursor: pointer; }
 .pulse-name.linked:hover, .pulse-name.linked:focus-visible { color: var(--action); }
 .pulse-metrics { display: grid; grid-template-columns: repeat(3, 1fr); gap: var(--s3); }
-.pm .n { font: 300 22px/1 var(--font-mono); color: var(--ink); }
-.pm .n.real { color: var(--action); }
+.pm .n { font: 300 22px/1 var(--font-mono); color: var(--ink-dim); }
+.pm .n.real { color: var(--ink); }
 .pm .l { margin-top: 1px; }
 .actgrid { display: grid; grid-template-columns: repeat(10, 1fr); gap: 4px; margin-top: var(--s3); }
 .actgrid i { aspect-ratio: 1; border-radius: 50%; background: var(--hair); }
-.actgrid i.on { background: var(--memory); }
-/* P3.3: an "on" dot is a real captured object — click/Enter opens it in the graph */
-.actgrid i.on { cursor: pointer; transition: background 100ms, box-shadow 100ms; }
+.actgrid i.on { background: var(--ink-dim); cursor: pointer; transition: background 100ms, box-shadow 100ms; }
 .actgrid i.on:hover, .actgrid i.on:focus-visible { background: var(--action); box-shadow: 0 0 0 2px rgba(255,122,26,0.25); outline: none; }
 
 /* =============================================================================
-   RIGHT RAIL widgets
+   RIGHT RAIL — "what wants you": items needing attention. Deliberately
+   sparse — retired reference widgets are not recreated to fill it (§4.1, Q5).
    ========================================================================== */
 .attn-count { display: flex; align-items: baseline; gap: var(--s2); margin-bottom: var(--s3); }
 .attn-row { display: grid; grid-template-columns: 12px 1fr auto; gap: var(--s2); align-items: start; padding: 5px 0; }
 .attn-row + .attn-row { border-top: 1px solid var(--hair-faint); }
-.attn-row .ic { text-align: center; font-size: 10px; }
-.attn-row .ic.pr { color: var(--apps); } .attn-row .ic.cf { color: var(--error); } .attn-row .ic.bl { color: var(--routines); }
+.attn-row .ic { text-align: center; font-size: 10px; color: var(--ink-faint); }
 .attn-row .t { color: var(--ink); font-size: 10.5px; }
 .attn-row .m { color: var(--ink-faint); font-size: 9px; }
 .attn-row .tm { color: var(--ink-ghost); font: 500 9px/1 var(--font-mono); }
-.mixbar { display: flex; height: 6px; margin-top: var(--s2); border: 1px solid var(--hair); }
-.mixbar span:nth-child(1){background:var(--action);flex:9}
-.mixbar span:nth-child(2){background:var(--memory);flex:14}
-.mixbar span:nth-child(3){background:var(--apps);flex:6}
-.mixbar span:nth-child(4){background:var(--ink-ghost);flex:18}
-.mixleg { display: flex; gap: var(--s3); margin-top: 5px; flex-wrap: wrap; }
-.mixleg span { font: 600 8px/1 var(--font-ui); letter-spacing: 0.1em; text-transform: uppercase; color: var(--ink-faint); white-space: nowrap; }
-
-.deck { display: grid; grid-template-columns: 1fr 1fr; gap: var(--s2); }
-.skill {
-  border: 1px solid var(--hair); border-radius: 4px;
-  background: rgba(255,255,255,0.015);
-  padding: var(--s2) var(--s3) var(--s3);
-  display: flex; flex-direction: column; gap: 5px; min-height: 58px;
-}
-.skill .top { display: flex; align-items: center; gap: 5px; }
-.skill .top .si { color: var(--ink-dim); font-size: 10px; }
-.skill .cmd { color: var(--ink); font: 500 10px/1 var(--font-mono); }
-.skill .spec { font: 600 7.5px/1 var(--font-ui); letter-spacing: 0.1em; text-transform: uppercase; }
-.skill .spec b { color: var(--memory); font-weight: 600; }
-.skill .spec span { color: var(--ink-ghost); }
-.skill .run { margin-top: auto; display: flex; gap: 6px; align-items: center; color: var(--action); font-size: 9px; }
-.skill .run .o { color: var(--ink-ghost); }
-.skill.click { cursor: pointer; }
-.skill.click:hover { border-color: rgba(255,122,26,0.4); }
-.skill.click:hover .cmd { color: var(--action); }
-
-table.routines { width: 100%; border-collapse: collapse; font-size: 10px; }
-.routines th { text-align: left; color: var(--ink-ghost); font: 600 8px/1 var(--font-ui); letter-spacing: 0.12em; text-transform: uppercase; padding: 0 0 var(--s2); }
-.routines td { padding: 4px 0; border-top: 1px solid var(--hair-faint); color: var(--ink-dim); vertical-align: middle; }
-.routines td.tm { font-family: var(--font-mono); color: var(--ink-faint); font-size: 9px; width: 44px; }
-.routines .rn { display: flex; align-items: center; gap: 5px; }
-.routines .runner { font: 600 7px/1 var(--font-ui); letter-spacing: 0.08em; text-transform: uppercase; color: var(--ink-ghost); border: 1px solid var(--hair); border-radius: 2px; padding: 1px 3px; }
-.routines td.st { text-align: right; width: 62px; }
-.routines .st .b { font: 600 8px/1 var(--font-ui); letter-spacing: 0.08em; text-transform: uppercase; }
-.routines .st .b.fired { color: var(--ok); }
-.routines .st .b.queued { color: var(--ink-ghost); }
-.routines tr.next td { color: var(--ink); }
-.routines tr.next td.st .b { color: #180a02; background: var(--action); padding: 2px 5px; border-radius: 2px; }
 
 /* =============================================================================
-   RESPONSIVE
+   RESPONSIVE — desktop command centre → laptop drawers → mobile sequential.
+   The Context Field is preserved at every width; the composition is never
+   forced onto a phone (§4.12).
    ========================================================================== */
 @media (max-width: 1200px) {
   .shell { grid-template-columns: minmax(0, 1fr); grid-template-areas: "header" "center"; }
@@ -689,7 +660,7 @@ table.routines { width: 100%; border-collapse: collapse; font-size: 10px; }
 @media (max-width: 720px) {
   body { overflow: auto; }
   .shell { display: flex; flex-direction: column; height: auto; overflow: visible; }
-  .header { order: 0; position: sticky; top: 2px; z-index: 30; background: var(--bg); grid-template-columns: auto 1fr; gap: var(--s2); padding: 0 var(--s3); }
+  .header { order: 0; position: sticky; top: 1px; z-index: 30; background: var(--bg); grid-template-columns: auto 1fr; gap: var(--s2); padding: 0 var(--s3); }
   .header .h-left { display: none; }
   .brand { justify-self: start; gap: 6px; }
   .brand .sub, .header .tools, #p-graph, .dev-flag { display: none; }
@@ -698,12 +669,9 @@ table.routines { width: 100%; border-collapse: collapse; font-size: 10px; }
   .center { order: 1; overflow: visible; }
   .field-wrap { position: static; height: auto; }
   .field-svg { position: static; width: 100%; height: 88vw; }
-  /* Not a dead-scroll region: a vertical swipe scrolls the page until the
-     reader zooms in, at which point the graph takes one-finger panning. */
   .field-svg { touch-action: pan-y; }
   .field-svg.engaged { touch-action: none; }
   .field-readout, .legend-pill, .node-tip { display: none; }
-  /* Graph controls become an in-flow surface under the graph (blueprint §18). */
   .gctl, .askp {
     position: static; width: auto; margin: var(--s2) var(--s3) 0;
     backdrop-filter: none; background: var(--bg-1); max-height: none;
@@ -728,9 +696,7 @@ table.routines { width: 100%; border-collapse: collapse; font-size: 10px; }
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .ring.spin { animation: none; }
   .gnode.sel .disc, .gnode.sel .dot, .gnode.match .halo { animation: none; }
   * { transition-duration: 1ms !important; }
 }
-@keyframes ringspin { to { transform: rotate(360deg); } }
 [hidden] { display: none !important; }

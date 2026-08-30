@@ -3,10 +3,10 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>DevWorkspace — Agentic Context OS</title>
+    <title>Personal Developer Workspace</title>
     <link
       rel="icon"
-      href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Crect width='24' height='24' fill='%23000'/%3E%3Cpath d='M12 3 4 7.5v9L12 21l8-4.5v-9L12 3Z' fill='none' stroke='%23ff7a1a' stroke-width='1.5'/%3E%3Ccircle cx='12' cy='12' r='3' fill='%23ff7a1a'/%3E%3C/svg%3E"
+      href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Crect width='24' height='24' fill='%23000'/%3E%3Cline x1='7' y1='17' x2='17' y2='7' stroke='%23ff7a1a' stroke-width='2'/%3E%3Ccircle cx='7' cy='17' r='3.4' fill='%23ff7a1a'/%3E%3Ccircle cx='17' cy='7' r='3.4' fill='none' stroke='%23ff7a1a' stroke-width='2'/%3E%3C/svg%3E"
     />
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
@@ -20,7 +20,7 @@
     <a class="skip-link" href="#g-search">Skip to context search</a>
 
     <div class="shell">
-      <!-- ===== HEADER — compact, centred ===== -->
+      <!-- ===== HEADER — compact, framing, not a navbar ===== -->
       <header class="header">
         <div class="h-left">
           <button class="iconbtn rail-toggle" id="toggle-left" aria-label="Toggle left rail">☰</button>
@@ -28,15 +28,14 @@
 
         <div class="brand">
           <svg class="mark" viewBox="0 0 24 24" aria-hidden="true">
-            <path d="M12 3 4 7.5v9L12 21l8-4.5v-9L12 3Z" fill="none" stroke="currentColor" stroke-width="1.6" />
-            <circle cx="12" cy="12" r="3" fill="currentColor" />
+            <line x1="7" y1="17" x2="17" y2="7" stroke="currentColor" stroke-width="1.6" />
+            <circle cx="7" cy="17" r="3.2" fill="currentColor" />
+            <circle cx="17" cy="7" r="3.2" fill="none" stroke="currentColor" stroke-width="1.6" />
           </svg>
           <span class="name">DEV<b>WORKSPACE</b></span>
-          <span class="sub" id="brand-sub">agentic context os</span>
+          <span class="sub" id="brand-sub">persistent context layer</span>
           <span class="tools">
-            <button class="iconbtn" id="t-search" aria-label="Search (preview)">⌕</button>
-            <button class="iconbtn" id="t-layout" aria-label="Layout (preview)">▦</button>
-            <button class="iconbtn" id="t-info" aria-label="About (preview)">ⓘ</button>
+            <button class="iconbtn" id="t-search" aria-label="Search context">⌕</button>
           </span>
         </div>
 
@@ -46,15 +45,14 @@
             <option value="">…</option>
           </select>
           <span class="dev-flag" title="Development-only authentication boundary (P2.7)">DEV</span>
-          <button class="pill" id="p-menu" aria-label="Menu (preview)">Menu</button>
           <button class="iconbtn rail-toggle" id="toggle-right" aria-label="Toggle right rail">☰</button>
         </div>
       </header>
 
-      <!-- ===== LEFT RAIL ===== -->
+      <!-- ===== LEFT RAIL — what you reach for ===== -->
       <aside class="rail left" aria-label="Left intelligence rail">
-        <section class="sect" aria-labelledby="s-tools">
-          <header><span class="glyph" aria-hidden="true">⊞</span><span class="label" id="s-tools">Micro Tools</span></header>
+        <section class="sect" aria-labelledby="s-actions">
+          <header><span class="glyph" aria-hidden="true">⌘</span><span class="label" id="s-actions">Actions</span></header>
           <div class="tool click" id="tool-capture" role="button" tabindex="0">
             <span class="ic" aria-hidden="true">⌘</span>
             <span><span class="nm">Capture</span><br /><span class="ds">Save context into a project instantly</span></span>
@@ -65,28 +63,11 @@
             <span><span class="nm">Ask</span><br /><span class="ds">Question your context, grounded in real objects</span></span>
             <span class="ar" aria-hidden="true">→</span>
           </div>
-          <div class="tool apps off">
-            <span class="ic" aria-hidden="true">◈</span>
-            <span><span class="nm">GitHub</span><br /><span class="ds">Repository activity</span></span>
-            <span class="tag offline">Off</span>
-          </div>
-          <div class="tool apps off">
-            <span class="ic" aria-hidden="true">▤</span>
-            <span><span class="nm">Terminal</span><br /><span class="ds">Recent commands &amp; context</span></span>
-            <span class="tag offline">Off</span>
-          </div>
-          <div class="tool apps off">
-            <span class="ic" aria-hidden="true">◇</span>
-            <span><span class="nm">Docs</span><br /><span class="ds">Project documentation</span></span>
-            <span class="tag offline">Off</span>
-          </div>
-          <div class="addrow">＋ Add tool</div>
         </section>
 
         <section class="sect" aria-labelledby="s-session">
           <header>
             <span class="glyph" aria-hidden="true">▣</span><span class="label" id="s-session">Session</span>
-            <span class="meta tag preview">Preview</span>
           </header>
           <div class="clock"><span class="t mono" id="clock">--:--:--</span><span class="z">AEST · SYDNEY</span></div>
           <div class="wk mono" id="wk">WK34 · AUG 2026</div>
@@ -95,22 +76,13 @@
             <span class="tz"><span class="k">USA ET</span><span class="v" id="tz-et">—</span></span>
             <span class="tz"><span class="k">LONDON</span><span class="v" id="tz-ln">—</span></span>
           </div>
-          <div class="qgrid" id="qgrid" aria-hidden="true"></div>
-          <div class="label" style="margin-top: var(--s3)">What's next</div>
-          <ul class="next-list">
-            <li>Team standup<span class="tm">15:30</span></li>
-            <li>Review authentication PR<span class="tm">16:15</span></li>
-            <li>Sprint review — context engine<span class="tm">18:30</span></li>
-          </ul>
+          <div class="qgrid" id="qgrid" aria-hidden="true" title="Progress through today"></div>
         </section>
 
-        <!-- P3.3: mixed REAL/PREVIEW, unchanged from P3.1/P3.2 convention —
-             the section stays tagged Preview because Open tasks/Blocked have
-             no backing domain data (classification C: no task entity exists
-             yet), but the parts that DO have real data carry the .real class
-             (Captures) or are now interactive (the header link, the activity
-             grid) — the same project/object identity the graph and inspector
-             use, never a duplicate. See app.js renderPulse/renderActGrid. -->
+        <!-- Project Pulse — a projection of the same object the graph and
+             inspector hold (P3.3). Captures / activity are real; "Open tasks"
+             and "Blocked" have no backing domain object yet, so the section
+             stays PREVIEW-tagged. -->
         <section class="sect" aria-labelledby="s-pulse">
           <header>
             <span class="glyph" aria-hidden="true">◭</span><span class="label" id="s-pulse">Project Pulse</span>
@@ -127,36 +99,31 @@
         </section>
       </aside>
 
-      <!-- ===== CENTRE — interactive context graph ===== -->
+      <!-- ===== CENTRE — the Context Field: the developer's real workspace
+           objects and the real relationships between them (§5) ===== -->
       <main class="center" id="center">
         <div class="field-wrap">
           <svg class="field-svg" id="fsvg" viewBox="0 0 1000 1000" preserveAspectRatio="xMidYMid meet"
                role="application" aria-roledescription="Interactive context graph"
-               aria-label="Context graph. Projects and their captured context, drawn from the workspace you can see. Drag to pan, scroll to zoom, click a node to inspect it. Use the search field in the graph controls for keyboard access to any node.">
+               aria-label="Context graph. The workspace, its projects and their captured context, drawn from what you can see. Drag to pan, scroll to zoom, click a node to inspect it. Use the search field in the graph controls for keyboard access to any node.">
             <defs>
-              <pattern id="hex" width="34" height="59" patternUnits="userSpaceOnUse">
-                <path class="hexbg" d="M17 0 L34 10 L34 30 L17 40 L0 30 L0 10 Z M17 40 L34 50 L34 59 M0 50 L17 59" />
+              <pattern id="grid" width="46" height="46" patternUnits="userSpaceOnUse">
+                <circle class="gridbg" cx="2" cy="2" r="0.9" />
               </pattern>
             </defs>
-            <rect class="hexfill" x="-500" y="-500" width="2000" height="2000" fill="url(#hex)" />
+            <rect class="hexfill" x="-500" y="-500" width="2000" height="2000" fill="url(#grid)" />
             <!-- one transform on #viewport carries all pan/zoom -->
             <g id="viewport">
-              <g id="f-rings"></g>
-              <g id="f-mem"></g>
-              <g id="f-core"></g>
-              <g id="f-apps"></g>
-              <g id="f-rt"></g>
-              <g id="f-labels"></g>
               <g id="g-edges"></g>
               <g id="g-nodes"></g>
             </g>
           </svg>
 
-          <div class="field-readout tl" id="ro-tl">CONTEXT GRAPH · LIVE</div>
+          <div class="field-readout tl" id="ro-tl">WORKSPACE</div>
           <div class="node-tip" id="node-tip" hidden></div>
 
-          <!-- graph control panel (blueprint §14) — only controls the graph
-               actually supports; no decorative physics sliders. -->
+          <!-- graph control panel — only controls the graph actually supports;
+               one deterministic layout, no projection or physics controls. -->
           <section class="gctl" id="gctl" aria-label="Graph controls">
             <header>
               <span class="label">Context Graph</span>
@@ -171,7 +138,7 @@
               </div>
               <ul class="results" id="g-results" role="listbox" aria-label="Search results" hidden></ul>
 
-              <div class="label">Layers</div>
+              <div class="label">Types</div>
               <div class="chips" id="g-filters"></div>
 
               <div class="label">Structure</div>
@@ -193,10 +160,10 @@
             </div>
           </section>
 
-          <!-- P3.4 — the intelligence layer over the existing second brain.
-               Every answer is grounded in a ContextSet the core assembled for
-               this principal; every citation is a real object id that selects
-               and focuses the graph node. -->
+          <!-- Assistant panel (P3.4, pre-existing on this branch). T3.1 did not
+               build or remove it; it carries the conformed token system. Every
+               evidence row is a real object id that selects and focuses the
+               graph node. -->
           <section class="askp" id="askp" aria-label="Ask your context" hidden>
             <header>
               <span class="label">Ask Context</span>
@@ -229,11 +196,10 @@
             </div>
           </section>
 
-          <div class="legend-pill" aria-label="Layers">
-            <span class="li"><span class="sw apps"></span>Apps</span>
-            <span class="li"><span class="sw routines"></span>Routines</span>
-            <span class="li"><span class="sw memory"></span>Memory</span>
-            <span class="li"><span class="sw core"></span>Core</span>
+          <div class="legend-pill" aria-label="Graph legend">
+            <span class="li"><span class="sw a"></span>Workspace</span>
+            <span class="li"><span class="sw b"></span>Project</span>
+            <span class="li"><span class="sw c"></span>Context</span>
           </div>
 
           <div class="field-empty" id="field-empty" hidden>
@@ -241,7 +207,8 @@
             <span>Capture something into a project to populate the graph.</span>
           </div>
 
-          <!-- Context Inspector: real persisted data for the selected node -->
+          <!-- Context Inspector: identity, actions, and content/relationships
+               on distinct surfaces; real persisted data for the selected node. -->
           <div class="inspector" id="inspector">
             <div class="ibar">
               <span class="label">Context Inspector</span>
@@ -253,7 +220,7 @@
             <div class="col">
               <h2 id="ins-title">—</h2>
               <div class="sub">
-                <span class="dot action" id="ins-dot"></span>
+                <span class="dot" id="ins-dot"></span>
                 <span class="label" id="ins-type">—</span>
                 <span class="mono" id="ins-id">—</span>
               </div>
@@ -285,87 +252,40 @@
         </div>
       </main>
 
-      <!-- ===== RIGHT RAIL ===== -->
+      <!-- ===== RIGHT RAIL — what wants you ===== -->
       <aside class="rail right" aria-label="Right intelligence rail">
-        <!-- P3.3: classified C — legitimately unavailable. Every row here
-             would need a backend capability this milestone does not build
-             (GitHub activity, decision-conflict detection, task tracking),
-             so none resolves to a real persisted object and none is wired
-             to selection. Left as static, clearly PREVIEW-tagged content
-             rather than fabricating a linkage to real data. -->
+        <!-- Classified C (P3.3): every row here needs a backend capability this
+             MVP does not build — GitHub activity, decision-conflict detection,
+             task tracking — so none resolves to a real persisted object. Kept as
+             clearly PREVIEW-tagged content rather than fabricating a linkage;
+             the region is intentionally quiet. -->
         <section class="sect" aria-labelledby="s-attn">
           <header>
-            <span class="glyph" aria-hidden="true">✉</span><span class="label" id="s-attn">Attention</span>
+            <span class="glyph" aria-hidden="true">▲</span><span class="label" id="s-attn">Attention</span>
             <span class="meta tag preview">Preview</span>
           </header>
           <div class="attn-count"><span class="metric" id="attn-n">12</span><span class="label">Items need review</span></div>
           <div class="attn-row">
-            <span class="ic pr" aria-hidden="true">⚡</span>
+            <span class="ic" aria-hidden="true">⚡</span>
             <span><span class="t">PR #184 — authentication</span><br /><span class="m">auth-service · needs review</span></span>
             <span class="tm">18m</span>
           </div>
           <div class="attn-row">
-            <span class="ic cf" aria-hidden="true">◉</span>
+            <span class="ic" aria-hidden="true">◉</span>
             <span><span class="t">Decision conflict detected</span><br /><span class="m">database persistence approach</span></span>
             <span class="tm">2h</span>
           </div>
           <div class="attn-row">
-            <span class="ic bl" aria-hidden="true">◆</span>
+            <span class="ic" aria-hidden="true">◆</span>
             <span><span class="t">3 tasks blocked</span><br /><span class="m">payment-service</span></span>
             <span class="tm">4h</span>
           </div>
-          <div class="label" style="margin-top: var(--s3)">Today's mix</div>
-          <div class="mixbar" aria-hidden="true"><span></span><span></span><span></span><span></span></div>
-          <div class="mixleg"><span>Tasks</span><span>Context</span><span>Apps</span><span>Other</span></div>
         </section>
 
-        <section class="sect" aria-labelledby="s-skills">
-          <header>
-            <span class="glyph" aria-hidden="true">⚡</span><span class="label" id="s-skills">Skills Deck</span>
-            <span class="meta label">Tap ▶ to run</span>
-          </header>
-          <div class="deck">
-            <div class="skill">
-              <div class="top"><span class="si" aria-hidden="true">▤</span><span class="cmd">/summarize</span></div>
-              <span class="spec"><b>OPUS</b> · <span>XHIGH</span></span>
-              <span class="run">▶ <span class="o">○</span></span>
-            </div>
-            <div class="skill">
-              <div class="top"><span class="si" aria-hidden="true">◫</span><span class="cmd">/plan</span></div>
-              <span class="spec"><b>SONNET</b> · <span>HIGH</span></span>
-              <span class="run">▶ <span class="o">○</span></span>
-            </div>
-            <div class="skill click" id="skill-capture" role="button" tabindex="0">
-              <div class="top"><span class="si" aria-hidden="true">⌘</span><span class="cmd">/capture</span></div>
-              <span class="spec"><b>SONNET</b> · <span>MED</span></span>
-              <span class="run">▶ <span class="o">○</span></span>
-            </div>
-            <div class="skill">
-              <div class="top"><span class="si" aria-hidden="true">⇄</span><span class="cmd">/handoff</span></div>
-              <span class="spec"><b>OPUS</b> · <span>XHIGH</span></span>
-              <span class="run">▶ <span class="o">○</span></span>
-            </div>
-          </div>
-        </section>
-
-        <section class="sect" aria-labelledby="s-routines">
-          <header>
-            <span class="glyph" aria-hidden="true">⚙</span><span class="label" id="s-routines">Routines</span>
-            <span class="meta label">2 / 7 fired</span>
-          </header>
-          <table class="routines">
-            <thead><tr><th>Time</th><th>Routine</th><th style="text-align:right">Status</th></tr></thead>
-            <tbody>
-              <tr><td class="tm">09:00</td><td><span class="rn">context-index<span class="runner">Hermes</span></span></td><td class="st"><span class="b fired">Fired</span></td></tr>
-              <tr><td class="tm">11:30</td><td><span class="rn">github-sync<span class="runner">Hermes</span></span></td><td class="st"><span class="b fired">Fired</span></td></tr>
-              <tr class="next"><td class="tm">14:00</td><td><span class="rn">project-summary<span class="runner">Desktop</span></span></td><td class="st"><span class="b">Next</span></td></tr>
-              <tr><td class="tm">16:30</td><td><span class="rn">stale-task-check<span class="runner">Hermes</span></span></td><td class="st"><span class="b queued">Queued</span></td></tr>
-              <tr><td class="tm">18:00</td><td><span class="rn">client-report-draft<span class="runner">Hermes</span></span></td><td class="st"><span class="b queued">Queued</span></td></tr>
-              <tr><td class="tm">20:00</td><td><span class="rn">evening-ritual<span class="runner">Desktop</span></span></td><td class="st"><span class="b queued">Queued</span></td></tr>
-              <tr><td class="tm">21:30</td><td><span class="rn">next-day-prep<span class="runner">Desktop</span></span></td><td class="st"><span class="b queued">Queued</span></td></tr>
-            </tbody>
-          </table>
-        </section>
+        <p class="rail-quiet">
+          Nothing else is waiting on you. When GitHub activity, decision
+          conflicts and task tracking are connected, they surface here.
+        </p>
       </aside>
     </div>
 
