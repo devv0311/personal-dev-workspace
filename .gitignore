@@ -26,6 +26,10 @@ logs/
 
 # Tooling scratch
 .playwright-mcp/
+tree.txt
+
+# Large reference assets (kept locally; too large for the Git remote)
+reference/videos/
 
 # Dependency / build artifacts
 node_modules/

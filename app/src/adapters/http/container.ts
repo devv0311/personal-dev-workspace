@@ -4,6 +4,7 @@ import { db } from '../persistence/db.ts';
 import { makeScopeResolver } from '../persistence/scope.pg.ts';
 import { makeObjectRepository } from '../persistence/object-repository.pg.ts';
 import { makeRelationshipRepository } from '../persistence/relationship-repository.pg.ts';
+import { makeMemberRepository } from '../persistence/member-repository.pg.ts';
 import {
   activityWriter,
   auditWriter,
@@ -15,6 +16,7 @@ export function buildContainer(uow = db) {
   const objects = makeObjectRepository(uow);
   const relationships = makeRelationshipRepository(uow);
   const scopeResolver = makeScopeResolver(uow);
+  const members = makeMemberRepository(uow);
   // The RetrievalProvider seam (P2.6 §11). Swapping lexical → semantic changes
   // this line and adapters/retrieval/ only.
   const retrieval = makeLexicalRetrievalProvider(uow);
@@ -22,6 +24,7 @@ export function buildContainer(uow = db) {
     uow,
     objects,
     relationships,
+    members,
     retrieval,
     scopeResolver,
     activity: activityWriter,

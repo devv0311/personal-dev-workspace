@@ -100,7 +100,26 @@ const LAYER_BY_TYPE: Record<ObjectType, GraphLayer> = {
 };
 
 const SNIPPET_MAX = 180;
-const ROOT_TITLE = 'Context Core';
+/**
+ * The graph root is the user's own Workspace — a real entity in the data model
+ * (blueprint §5.5). It is named in PRODUCT vocabulary and must never be named
+ * after the assistant or its configuration.
+ */
+const ROOT_TITLE = 'Workspace';
+
+/**
+ * Weak / possible relationships are excluded from the primary context view
+ * (P2.2 §4, restated as a hard rendering rule at blueprint §5.3). They are
+ * reachable only through a deliberate on-demand "possibly related" affordance,
+ * which is not built (blueprint Q6 — deferred).
+ *
+ * The filter lives HERE, in the read model, rather than in the client: a view
+ * filter can be bypassed, and every consumer of this graph — the field, the
+ * inspector, the rails — must get the same answer. Only the RELATIONSHIP is
+ * withheld; the object at its far end is a real visible object and continues
+ * to be returned as a node on its own merits.
+ */
+const isWeak = (e: RelationshipEdge): boolean => e.confidenceState === 'weak';
 
 function snippet(o: WorkspaceObject): string {
   const source = o.body || '';
@@ -193,6 +212,8 @@ export async function buildContextGraph(
 
   const edges: GraphEdge[] = [];
   for (const e of rawEdges) {
+    // Weak links never enter the primary context view (P2.2 §4).
+    if (isWeak(e)) continue;
     // Post-hoc cross-check: both endpoints must be in the visible node set.
     if (byId.has(e.fromObjectId) && byId.has(e.toObjectId)) edges.push(toEdge(e));
   }
@@ -251,6 +272,9 @@ export async function inspectObject(
   const raw = await deps.relationships.forObject(scope, object.id);
   const edges: InspectedEdge[] = [];
   for (const e of raw) {
+    // Same rule as the whole-graph read: the inspector is primary context too,
+    // so a weak link must not surface here either (P2.2 §4).
+    if (isWeak(e)) continue;
     const outgoing = e.fromObjectId === object.id;
     const otherId = outgoing ? e.toObjectId : e.fromObjectId;
     // Resolve the far endpoint through findVisible — never from a join the

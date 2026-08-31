@@ -35,7 +35,39 @@ test('a note carries a synthesised belongs_to edge, not a bare FK', async () => 
   assert.equal(belongs.toObjectId, IDS.projectA);
   assert.equal(belongs.synthesised, true);
   assert.equal(belongs.id, null); // synthesised: not a persisted row
-  assert.equal(belongs.origin, 'explicit');
+  assert.equal(belongs.origin, 'structural');
+});
+
+// T3.2-R1 / F3. The synthesised belongs_to edge is computed on read from
+// object.home_project_id. It was never authored by anyone, so it must never be
+// presented as if it were: the inspector shows this edge as STRUCTURAL and
+// prints its origin beside that badge, and the two must agree (§5.3 origin
+// vocabulary, §5.8/§5.9 truthful provenance).
+test('a synthesised belongs_to edge can never claim explicit / user-authored provenance', async () => {
+  const scope = await container.scopeResolver.resolve(asPrincipalId(IDS.alice));
+  assert.ok(scope);
+  const note = await captureNote(container, { scope, projectId: IDS.projectA, body: 'derived' });
+
+  // Both read paths that can produce it: the object's own anchor, and the
+  // project's incident edges. One builder feeds both, so neither may drift.
+  const fromNote = await container.relationships.forObject(scope, note.id);
+  const fromProject = await container.relationships.forObject(scope, asObjectId(IDS.projectA));
+
+  const derived = [...fromNote, ...fromProject].filter((e) => e.synthesised);
+  assert.ok(derived.length >= 2, 'the anchor is visible from both endpoints');
+
+  for (const e of derived) {
+    assert.equal(e.origin, 'structural', 'a computed edge is structural, never explicit');
+    assert.notEqual(e.origin, 'explicit');
+    assert.notEqual(e.origin, 'user_confirmed');
+    assert.equal(e.authorId, null, 'nobody authored a derivation');
+    assert.equal(e.id, null, 'a computed edge is not a stored row');
+    assert.equal(
+      e.provenance.kind,
+      'synthesised:home_project',
+      'provenance names the column it was computed from',
+    );
+  }
 });
 
 test('a real stored edge round-trips with typed verb, provenance, author, visibility', async () => {

@@ -159,6 +159,14 @@ export function createApp(container: Container = buildContainer()) {
           });
         }
 
+        // Workspace membership. Two columns — id and display name — because
+        // that is all the model records about a person (T3.2 §13). No e-mail,
+        // avatar, role, external account or activity exists to return.
+        if (method === 'GET' && path === '/api/workspace/members') {
+          const members = await container.members.listMembers(scope);
+          return send(res, 200, { members });
+        }
+
         if (method === 'GET' && path === '/api/graph') {
           // Server-side authorization: the graph is assembled from the same
           // scope-filtered repositories as every other read. Client-side
