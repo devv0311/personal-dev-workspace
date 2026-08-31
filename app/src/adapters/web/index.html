@@ -275,6 +275,13 @@
               </div>
               <div class="meta-row mono" id="ins-meta"></div>
 
+              <!-- External anchor (T3.3.1). Shown only when this object records
+                   one, and it states exactly what the anchor means: the object
+                   is ours, the activity is elsewhere, and the reference is the
+                   stable identity that joins them. -->
+              <div class="label" id="ins-src-label" hidden>External source</div>
+              <div class="ins-src" id="ins-src" hidden></div>
+
               <!-- Reason-giving. Every line is derived from a real field and
                    names the evidence; inferred lines are marked and hedged. -->
               <div class="label">Why this matters</div>
@@ -361,6 +368,55 @@
 
       <!-- ===== RIGHT RAIL — what wants you ===== -->
       <aside class="rail right" aria-label="Right command rail">
+        <!-- REPOSITORY — external activity (T3.3.1). Read LIVE from GitHub
+             through /api/external/github at request time; nothing here is
+             seeded, cached in the page, or replayed from a fixture. Every
+             number printed as a total is one the source proved exact; a count
+             that could not be proved exact is shown as an em dash and the
+             surface says how many it is showing instead. GitHub supplies
+             activity only — it is never the system of record for a
+             DEVWORKSPACE object. -->
+        <section class="sect" aria-labelledby="s-repo">
+          <header>
+            <span class="glyph" aria-hidden="true">⎇</span><span class="label" id="s-repo">Repository</span>
+            <span class="meta tag" id="repo-state">Loading</span>
+          </header>
+
+          <a class="repo-id" id="repo-link" href="https://github.com" target="_blank" rel="noreferrer noopener">
+            <span class="repo-name mono" id="repo-name">—</span>
+            <span class="repo-sub" id="repo-sub">—</span>
+          </a>
+
+          <div class="pulse-metrics repo-metrics">
+            <span class="pm"><span class="n real" id="repo-prs">—</span><span class="l label">Pull requests</span></span>
+            <span class="pm"><span class="n real" id="repo-branches">—</span><span class="l label">Branches</span></span>
+            <span class="pm"><span class="n real" id="repo-people">—</span><span class="l label">Contributors</span></span>
+          </div>
+          <p class="sect-note" id="repo-breakdown">—</p>
+
+          <div class="label">Recent activity</div>
+          <table class="ttable repo-activity" aria-label="Recent repository activity — opens the entity on GitHub">
+            <thead><tr><th>When</th><th>Event</th><th>State</th></tr></thead>
+            <tbody id="repo-rows"></tbody>
+          </table>
+          <p class="rail-quiet" id="repo-empty" hidden>—</p>
+
+          <div class="label">Contributors</div>
+          <ul class="team" id="repo-contributors"></ul>
+
+          <div class="label">Continuous integration</div>
+          <div class="repo-ci" id="repo-ci">—</div>
+
+          <!-- The internal object this external repository is anchored to, when
+               the current principal may see it. Resolved server-side through
+               the ordinary VisibilityPolicy, so the link can only ever name an
+               object this principal could already open. -->
+          <div class="label" id="repo-link-label" hidden>Linked context</div>
+          <ul class="repo-links" id="repo-linked"></ul>
+
+          <p class="rail-quiet" id="repo-foot">—</p>
+        </section>
+
         <!-- EMAIL — the reference's inbound-demand module. DEVWORKSPACE has no
              mail integration, so the surface is present and the state is
              stated: nothing is counted, nothing is listed, and no message,
@@ -393,6 +449,14 @@
              assistant's REAL provider when its /healthz answers, and says
              `offline` when it does not. No model or effort badge is ever
              invented (T3.2 §8). -->
+        <!-- Executability is a STATE, not a decoration (T3.3.5). A card is
+             pressable only while the engine behind it is actually reachable:
+             /capture runs in the core and is always available, while the three
+             assistant skills are disabled — with the reason stated in words —
+             whenever the assistant does not answer its /healthz. Pressing a
+             card shows it running, its elapsed time, and whether it succeeded
+             or failed. No effort tier is shown anywhere, because the service
+             exposes none, and a development stub is named as a stub. -->
         <section class="sect" aria-labelledby="s-skills">
           <header>
             <span class="glyph" aria-hidden="true">⌁</span><span class="label" id="s-skills">Skills Deck</span>
@@ -405,49 +469,53 @@
               <span class="run" aria-hidden="true">▶</span>
               <span class="sd">Save a note into the focused project</span>
               <span class="sk-meta mono">core · workspace</span>
+              <span class="sk-state mono" data-state role="status" aria-live="polite"></span>
             </div>
             <div class="skill click" id="flow-ask" role="button" tabindex="0">
               <span class="cmd mono">/ask</span>
               <span class="run" aria-hidden="true">▶</span>
               <span class="sd">Answer from your context, grounded in real objects</span>
               <span class="sk-meta mono" data-assistant>assistant · …</span>
+              <span class="sk-state mono" data-state role="status" aria-live="polite"></span>
             </div>
             <div class="skill click" id="flow-summarize" role="button" tabindex="0">
               <span class="cmd mono">/summarize</span>
               <span class="run" aria-hidden="true">▶</span>
               <span class="sd">Condense the current scope</span>
               <span class="sk-meta mono" data-assistant>assistant · …</span>
+              <span class="sk-state mono" data-state role="status" aria-live="polite"></span>
             </div>
             <div class="skill click" id="flow-extract" role="button" tabindex="0">
               <span class="cmd mono">/extract-tasks</span>
               <span class="run" aria-hidden="true">▶</span>
               <span class="sd">Pull action items from the current scope</span>
               <span class="sk-meta mono" data-assistant>assistant · …</span>
+              <span class="sk-state mono" data-state role="status" aria-live="polite"></span>
             </div>
           </div>
         </section>
 
-        <!-- ROUTINES — the reference's temporal schedule module. DEVWORKSPACE
-             has no scheduler: nothing runs on a clock, so no routine, no fire
-             time and no run history is shown. The table structure is present;
-             its state is OFFLINE and its rows are empty (T3.2 §9, §23). -->
+        <!-- ROUTINES — the reference's temporal schedule module, now carrying
+             REAL background-execution records (T3.3.4).
+
+             DEVWORKSPACE still has no clock-based scheduler, and none is
+             invented: no row shows a fire time, a cron expression or a next
+             run, because none exists. What does exist is the outbox worker
+             (P2.6 §13) — a real process that polls, claims events, runs a
+             registered consumer and records the outcome. Each row below is one
+             of those recorded outcomes: a real event, the real consumer
+             registered for it, the real object it concerned, its real state and
+             its real timestamp, scoped to what this principal may see. -->
         <section class="sect" aria-labelledby="s-routines">
           <header>
             <span class="glyph" aria-hidden="true">◷</span><span class="label" id="s-routines">Routines</span>
-            <span class="meta tag offline">Offline</span>
+            <span class="meta tag" id="routines-state">—</span>
           </header>
-          <table class="ttable routines" aria-label="Scheduled routines — none, no automation engine connected">
-            <thead><tr><th>Time</th><th>Routine</th><th>Status</th></tr></thead>
-            <tbody>
-              <tr class="ghost"><td class="t mono">--:--</td><td class="cx">—</td><td class="st">—</td></tr>
-              <tr class="ghost"><td class="t mono">--:--</td><td class="cx">—</td><td class="st">—</td></tr>
-              <tr class="ghost"><td class="t mono">--:--</td><td class="cx">—</td><td class="st">—</td></tr>
-            </tbody>
+          <table class="ttable routines" aria-label="Background execution records from the outbox worker">
+            <thead><tr><th>When</th><th>Routine</th><th>Status</th></tr></thead>
+            <tbody id="routine-rows"></tbody>
           </table>
-          <p class="rail-quiet">
-            Preview surface. No automation engine is connected, so nothing is
-            scheduled and no run has happened.
-          </p>
+          <p class="rail-quiet" id="routines-note">—</p>
         </section>
       </aside>
     </div>

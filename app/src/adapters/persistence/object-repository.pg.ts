@@ -95,6 +95,27 @@ export function makeObjectRepository(uow: UnitOfWork): ObjectRepository {
       return rows.map(toDomain);
     },
 
+    async listVisibleByExternalRef(scope: ResolvedScope, refs: readonly string[]) {
+      // The internal ↔ external join (T3.3.1). An internal object records the
+      // external identity it is anchored to; this resolves that anchor in the
+      // one direction the product allows — external activity POINTS AT an
+      // internal object, and never the reverse.
+      //
+      // Authorization is the same fragment as every other read: an external
+      // reference cannot reveal an object the principal may not see, so a
+      // repository panel can never leak another member's project through the
+      // fact that it happens to be linked to a public repo.
+      if (refs.length === 0) return [];
+      const vis = objectSqlFragment(scope, 'o', 2);
+      const { rows } = await uow.query<ObjectRow>(
+        `SELECT ${COLS} FROM object o
+          WHERE o.attributes->>'externalRef' = ANY($1::text[]) AND ${vis.text}
+          ORDER BY o.created_at ASC, o.id ASC`,
+        [[...refs], ...vis.params],
+      );
+      return rows.map(toDomain);
+    },
+
     async listProjects(scope: ResolvedScope) {
       const vis = objectSqlFragment(scope, 'o', 1);
       const { rows } = await uow.query<ObjectRow>(
