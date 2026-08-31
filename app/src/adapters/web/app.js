@@ -19,14 +19,22 @@ import {
   CAPABILITIES,
 } from './graph-model.js';
 
-const KNOWN_PRINCIPALS = [
-  { id: '00000000-0000-4000-8000-0000000000a1', label: 'Alice · owner' },
-  { id: '00000000-0000-4000-8000-0000000000b0', label: 'Bob · no access' },
-];
-const principalLabel = (id) =>
-  state.members.find((m) => m.id === id)?.displayName ??
-  KNOWN_PRINCIPALS.find((p) => p.id === id)?.label ??
-  'unknown principal';
+/**
+ * The dev-auth BOOTSTRAP credential (T3.3.2).
+ *
+ * The demo principals `Alice` and `Bob` are gone, along with the client-side
+ * table of principal labels that named them. This is a single id: the
+ * workspace's real primary member, used only to make the very first
+ * authenticated request, exactly as the P2.7 dev-auth boundary requires a
+ * credential to be presented. It is replaced wholesale when real
+ * authentication arrives.
+ *
+ * Nothing about the current user is asserted here. The identity actually shown
+ * on screen comes from `/api/me`, which the SERVER answers from the principal
+ * row the presented credential resolved to — so a name in the header is one
+ * the datastore returned, never one this file invented.
+ */
+const DEFAULT_PRINCIPAL_ID = '00000000-0000-4000-8000-0000000000d2';
 
 /** The assistant service (Zone B). Separate origin: it holds no DB credential. */
 const ASSISTANT_URL = localStorage.getItem('dc.assistantUrl') || 'http://localhost:4178';
@@ -37,13 +45,22 @@ const state = {
    *  between two surfaces, not two datasets (T3.2 §3, §21). */
   view: 'os',
   members: [],
-  principalId: localStorage.getItem('dc.principalId') || KNOWN_PRINCIPALS[0].id,
+  /** The authenticated identity, as the server reports it. Never assumed. */
+  me: null,
+  principalId: localStorage.getItem('dc.principalId') || DEFAULT_PRINCIPAL_ID,
   ask: { busy: false, result: null },
   graph: { nodes: [], edges: [], stats: { projects: 0, captures: 0 } },
   selected: null, // { node, detail }
   results: [],
   resultIndex: -1,
+  /** Whether the assistant answered its /healthz on the last probe. */
+  assistantOnline: false,
 };
+
+const principalLabel = (id) =>
+  (state.me && state.me.principalId === id ? state.me.displayName : null) ??
+  state.members.find((m) => m.id === id)?.displayName ??
+  'unknown principal';
 const $ = (id) => document.getElementById(id);
 
 /* ------------------------------------------------------------------- API -- */
@@ -74,7 +91,10 @@ const view = createGraphView({
   // The Second Brain is a concentric-ring projection of the same payload the
   // rails and the inspector read (T3.2 §4).
   layout: 'brain',
-  onCapability: (id) => runCapability(id),
+  // `runCapability` is async since T3.3.5 (a Skills run is awaited so its
+  // outcome can be reported). The ring invocations are fire-and-forget, so the
+  // rejection is absorbed here rather than surfacing as an unhandled promise.
+  onCapability: (id) => void runCapability(id).catch(() => {}),
   onSelect: (node) => {
     if (!node) closeInspector();
     else openInspector(node);
@@ -97,7 +117,7 @@ const view = createGraphView({
 const ring = createCommandRing({
   svg: $('osvg'),
   tip: $('node-tip'),
-  onAction: (id) => runCapability(id),
+  onAction: (id) => void runCapability(id).catch(() => {}),
   onCore: () => enterBrain(),
 });
 
@@ -131,37 +151,44 @@ function goTo(id) {
  * the capture form, the P3.4 assistant, the map's own relationship reveal, or
  * spatial search. Nothing here claims an executable the product lacks.
  */
-function runCapability(id) {
+async function runCapability(id) {
   document.body.classList.remove('drawer-left', 'drawer-right');
   switch (id) {
     case 'capture':
       enterBrain();
       $('tool-capture').click();
-      break;
+      // Opening the capture form is not a run: nothing has been captured yet,
+      // and reporting "done" here would claim a write that has not happened.
+      return { kind: 'opened', note: 'capture form ready' };
     case 'ask':
+      // Likewise — the assistant has not been called until there is a question.
       openAsk();
-      break;
-    case 'summarize':
+      return { kind: 'opened', note: 'ask panel ready' };
+    case 'summarize': {
+      if (!state.assistantOnline) return { kind: 'ran', ok: false, detail: 'assistant offline' };
       openAsk();
-      $('ask-summarize').click();
-      break;
-    case 'extract':
+      $('ask-input').value = 'Summarize this';
+      return { kind: 'ran', ...(await runAsk('Summarize this')) };
+    }
+    case 'extract': {
+      if (!state.assistantOnline) return { kind: 'ran', ok: false, detail: 'assistant offline' };
       openAsk();
-      $('ask-extract').click();
-      break;
+      $('ask-input').value = 'Extract tasks from this';
+      return { kind: 'ran', ...(await runAsk('Extract tasks from this')) };
+    }
     case 'connect': {
       // "What does this touch?" — selection is what reveals a node's real,
       // typed, directional relationships, so Connect is that gesture by name.
       enterBrain();
       const target = state.selected?.node?.id ?? state.graph.nodes.find((n) => n.kind === 'workspace')?.id;
       if (target) requestAnimationFrame(() => view.revealAndFocus(target));
-      break;
+      return { kind: 'opened', note: 'relationships revealed' };
     }
     case 'search':
       openSpotlight();
-      break;
+      return { kind: 'opened', note: 'search open' };
     default:
-      break;
+      return { kind: 'none' };
   }
 }
 
@@ -180,7 +207,7 @@ async function loadGraph({ keepSelection = true } = {}) {
 
     $('field-empty').hidden = graph.stats.projects > 0 || graph.stats.captures > 0;
     $('ro-tl').textContent = `WORKSPACE · ${graph.workspaceId.slice(0, 8)}`;
-    $('brand-id').textContent = `${principalLabel(state.principalId)} | Workspace`;
+    renderIdentity();
     $('os-tr').textContent =
       `${graph.stats.captures} CAPTURES · ${graph.stats.projects} PROJECTS · ${graph.stats.edges} LINKS`;
     $('brain-meta').textContent = `${graph.stats.nodes} NODES · ${graph.stats.edges} EDGES`;
@@ -231,20 +258,47 @@ function renderFilters(graph) {
 
 /* ------------------------------------------------------------- inspector -- */
 
+/* ------------------------------------------------------------ time (IST) --
+ *
+ * ONE timezone for the whole shell (T3.3.10): Asia/Kolkata, stated explicitly
+ * on every formatter rather than inherited from whatever the device happens to
+ * be set to. A timestamp read from the API, a repository commit time and the
+ * header clock are then guaranteed to be the same wall clock, and a shell
+ * opened on a machine set to another zone still reads in the user's own. */
+const TZ = 'Asia/Kolkata';
+const TZ_LABEL = 'IST · INDIA';
+
 const fmtDate = (iso) => {
   if (!iso) return '—';
   try {
-    return new Date(iso).toLocaleString(undefined, {
+    return new Date(iso).toLocaleString('en-GB', {
+      timeZone: TZ,
       day: '2-digit',
       month: 'short',
       year: 'numeric',
       hour: '2-digit',
       minute: '2-digit',
+      hour12: true,
     });
   } catch {
     return iso;
   }
 };
+
+/**
+ * Compact stamp for a rail table: the time when it happened today, the date
+ * when it did not. Both in IST, and `—` when there is genuinely no timestamp —
+ * an absent instant is never filled in with `now`.
+ */
+function istStamp(iso) {
+  if (!iso) return '—';
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return '—';
+  const day = (x) => x.toLocaleDateString('en-GB', { timeZone: TZ });
+  return day(d) === day(new Date())
+    ? d.toLocaleTimeString('en-GB', { timeZone: TZ, hour: '2-digit', minute: '2-digit', hour12: false })
+    : d.toLocaleDateString('en-GB', { timeZone: TZ, day: '2-digit', month: 'short' }).toUpperCase();
+}
 
 /** Header workspace/project readout + Workflows scope line — both are real,
  *  derived from the loaded graph and the current selection. Object count at
@@ -291,16 +345,6 @@ function renderActivity(graph) {
   if (note) note.textContent = total ? `${total} captured` : 'nothing captured yet';
   empty.hidden = total > 0;
 
-  const now = new Date();
-  const stamp = (iso) => {
-    const d = new Date(iso);
-    if (Number.isNaN(d.getTime())) return '—';
-    const sameDay = d.toDateString() === now.toDateString();
-    return sameDay
-      ? d.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit', hour12: false })
-      : d.toLocaleDateString('en-GB', { day: '2-digit', month: 'short' }).toUpperCase();
-  };
-
   items.forEach((item, i) => {
     const tr = document.createElement('tr');
     tr.className = i === 0 ? 'latest' : 'past';
@@ -311,7 +355,7 @@ function renderActivity(graph) {
 
     const t = document.createElement('td');
     t.className = 't mono';
-    t.textContent = stamp(item.createdAt);
+    t.textContent = istStamp(item.createdAt);
     const c = document.createElement('td');
     c.className = 'cx';
     c.textContent = item.title;
@@ -357,16 +401,453 @@ function providerLabel(p) {
   return `assistant · ${providerName(p.kind)}${p.model && p.kind !== 'fake' ? ` · ${p.model}` : ''}`;
 }
 
+/** Skills whose engine is the assistant service rather than the core. */
+const ASSISTANT_SKILLS = ['flow-ask', 'flow-summarize', 'flow-extract'];
+
+/**
+ * Executability is a state (T3.3.5).
+ *
+ * A card may only look pressable while the thing behind it can actually run.
+ * `/capture` is a core write path and is always available; the three assistant
+ * skills are disabled the moment the assistant stops answering, with the reason
+ * stated in words on the card itself. A disabled card is not merely styled
+ * differently — it is `aria-disabled`, drops its `button` role's tab stop, and
+ * its handler refuses — so it cannot be run by click, Enter or screen reader.
+ */
+function setSkillsAvailability(online) {
+  state.assistantOnline = online;
+  for (const id of ASSISTANT_SKILLS) {
+    const card = $(id);
+    if (!card) continue;
+    card.classList.toggle('unavailable', !online);
+    card.setAttribute('aria-disabled', String(!online));
+    card.tabIndex = online ? 0 : -1;
+    const slot = card.querySelector('[data-state]');
+    if (slot && !online) {
+      slot.textContent = 'unavailable · assistant not reachable';
+      slot.className = 'sk-state mono off';
+    } else if (slot && slot.classList.contains('off')) {
+      slot.textContent = '';
+      slot.className = 'sk-state mono';
+    }
+  }
+}
+
+/**
+ * Report a real run on the card that started it: running, then how long it took
+ * and whether it succeeded. The elapsed time is measured, not estimated, and a
+ * failure is reported as a failure — a card never silently returns to rest as
+ * though the run had worked.
+ */
+function skillRun(cardId) {
+  const slot = $(cardId)?.querySelector('[data-state]');
+  const started = performance.now();
+  let timer = null;
+  const paint = (text, cls) => {
+    if (!slot) return;
+    slot.textContent = text;
+    slot.className = `sk-state mono${cls ? ` ${cls}` : ''}`;
+  };
+  const elapsed = () => `${((performance.now() - started) / 1000).toFixed(1)}s`;
+  paint('running · 0.0s', 'busy');
+  timer = setInterval(() => paint(`running · ${elapsed()}`, 'busy'), 100);
+  const stop = () => {
+    if (timer) clearInterval(timer);
+    timer = null;
+  };
+  return {
+    ok: (note = 'done') => {
+      stop();
+      paint(`${note} · ${elapsed()}`, 'ok');
+    },
+    fail: (reason) => {
+      stop();
+      paint(`failed · ${reason}`, 'err');
+    },
+  };
+}
+
 async function probeAssistant() {
   const cells = document.querySelectorAll('.sk-meta[data-assistant]');
-  if (!cells.length) return;
   try {
     const res = await fetch(`${ASSISTANT_URL}/healthz`, { method: 'GET' });
     const data = await res.json();
     const p = data?.provider;
     cells.forEach((c) => (c.textContent = providerLabel(p)));
+    setSkillsAvailability(true);
   } catch {
     cells.forEach((c) => (c.textContent = 'assistant · offline'));
+    setSkillsAvailability(false);
+  }
+}
+
+/* ------------------------------------------------- repository (T3.3.1) ----- */
+//
+// External activity, read live from /api/external/github. Three rules govern
+// everything below, and each is enforced rather than asserted:
+//
+//   1. A NUMBER IS PRINTED ONLY WHEN IT IS EXACT. The server marks a section's
+//      total `null` when the source could not prove it was the whole set, and
+//      `exact()` renders that as an em dash. A partial page is never printed as
+//      a total.
+//   2. AN UNAVAILABLE SECTION SAYS SO. `ok: false` carries the source's own
+//      reason and is rendered as that reason — never as an empty list, which
+//      would read as "nothing happened".
+//   3. NOTHING IS SYNTHESISED. Every row's title, actor, state, timestamp and
+//      URL is a field the source returned; a missing field renders as absent.
+
+const REPO_EVENT_LABEL = {
+  commit: 'commit',
+  pull_request: 'pull request',
+  issue: 'issue',
+  workflow_run: 'CI run',
+};
+
+/** An exact count, or an em dash when the source could not prove one. */
+const exact = (section) => (section?.ok && section.total !== null ? String(section.total) : '—');
+
+const sectionOf = (repo, kind) => repo?.sections?.[kind] ?? null;
+const entitiesOf = (repo, kind) => {
+  const s = sectionOf(repo, kind);
+  return s?.ok ? s.entities : [];
+};
+
+function repoRow(entity) {
+  const tr = document.createElement('tr');
+  tr.dataset.ref = entity.ref; // the stable external id, preserved on the row
+  const t = document.createElement('td');
+  t.className = 't mono';
+  t.textContent = istStamp(entity.at);
+  const c = document.createElement('td');
+  c.className = 'cx';
+  const kind = REPO_EVENT_LABEL[entity.kind] ?? entity.kind;
+  c.textContent = entity.title || `(untitled ${kind})`;
+  const sub = document.createElement('span');
+  sub.className = 'rx mono';
+  // Only what the source actually reported: no actor line when there is no actor.
+  sub.textContent = entity.actor ? `${kind} · ${entity.actor}` : kind;
+  c.append(document.createElement('br'), sub);
+  const s = document.createElement('td');
+  s.className = 'st';
+  s.textContent = entity.state ?? '—';
+
+  tr.append(t, c, s);
+  if (entity.url) {
+    tr.setAttribute('role', 'button');
+    tr.setAttribute('tabindex', '0');
+    tr.setAttribute('aria-label', `Open ${entity.title || kind} on GitHub`);
+    const open = () => window.open(entity.url, '_blank', 'noopener,noreferrer');
+    tr.addEventListener('click', open);
+    tr.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter' || e.key === ' ') {
+        e.preventDefault();
+        open();
+      }
+    });
+  } else {
+    tr.classList.add('inert');
+  }
+  return tr;
+}
+
+function renderRepoUnavailable(message) {
+  const stateEl = $('repo-state');
+  stateEl.textContent = 'Unavailable';
+  stateEl.className = 'meta tag offline';
+  $('repo-name').textContent = '—';
+  $('repo-sub').textContent = '';
+  $('repo-link').removeAttribute('href');
+  for (const id of ['repo-prs', 'repo-branches', 'repo-people']) $(id).textContent = '—';
+  $('repo-breakdown').textContent = '';
+  $('repo-rows').textContent = '';
+  $('repo-contributors').textContent = '';
+  $('repo-linked').textContent = '';
+  $('repo-link-label').hidden = true;
+  $('repo-ci').textContent = '—';
+  const empty = $('repo-empty');
+  empty.hidden = false;
+  empty.textContent = message;
+  $('repo-foot').textContent = 'No repository activity is being displayed.';
+}
+
+async function loadRepository() {
+  let repo;
+  try {
+    repo = await api('/api/external/github');
+  } catch (err) {
+    renderRepoUnavailable(
+      err.status === 401
+        ? 'Not authenticated, so no repository activity was requested.'
+        : `Repository activity could not be read: ${err.message}`,
+    );
+    return;
+  }
+  state.repo = repo;
+
+  if (!repo.configured) {
+    renderRepoUnavailable('No repository is configured for this workspace.');
+    $('repo-state').textContent = 'Not configured';
+    return;
+  }
+
+  const repoSection = sectionOf(repo, 'repository');
+  const meta = entitiesOf(repo, 'repository')[0] ?? null;
+
+  const stateEl = $('repo-state');
+  if (repo.stale) {
+    stateEl.textContent = 'Stale';
+    stateEl.className = 'meta tag warn';
+  } else if (repoSection?.ok) {
+    stateEl.textContent = 'Live';
+    stateEl.className = 'meta tag live';
+  } else {
+    stateEl.textContent = 'Unavailable';
+    stateEl.className = 'meta tag offline';
+  }
+
+  $('repo-name').textContent = repo.repository;
+  $('repo-sub').textContent = meta
+    ? [meta.detail.defaultBranch, meta.state, meta.detail.language]
+        .filter(Boolean)
+        .join(' · ')
+    : (repoSection && !repoSection.ok ? repoSection.error : '—');
+  if (repo.repositoryUrl) $('repo-link').href = repo.repositoryUrl;
+  else $('repo-link').removeAttribute('href');
+
+  // Exact totals only. Pull requests, branches and contributors came back as
+  // provably complete pages; anything that did not renders as an em dash.
+  $('repo-prs').textContent = exact(sectionOf(repo, 'pull_request'));
+  $('repo-branches').textContent = exact(sectionOf(repo, 'branch'));
+  $('repo-people').textContent = exact(sectionOf(repo, 'contributor'));
+
+  const prs = sectionOf(repo, 'pull_request');
+  const issues = sectionOf(repo, 'issue');
+  const parts = [];
+  if (prs?.ok && prs.total !== null) {
+    const open = prs.entities.filter((p) => p.state === 'open').length;
+    const merged = prs.entities.filter((p) => p.state === 'merged').length;
+    parts.push(`${open} open · ${merged} merged`);
+  } else if (prs && !prs.ok) {
+    parts.push('pull requests unavailable');
+  }
+  if (issues?.ok && issues.total !== null) {
+    parts.push(`${issues.entities.filter((i) => i.state === 'open').length} open issues`);
+  } else if (issues && !issues.ok) {
+    parts.push('issues unavailable');
+  }
+  $('repo-breakdown').textContent = parts.join(' · ');
+
+  // Recent activity: real entities across the time-stamped kinds, newest first.
+  const timeline = ['commit', 'pull_request', 'issue', 'workflow_run']
+    .flatMap((k) => entitiesOf(repo, k))
+    .filter((e) => e.at)
+    .sort((a, b) => String(b.at).localeCompare(String(a.at)))
+    .slice(0, 8);
+  const rows = $('repo-rows');
+  rows.textContent = '';
+  for (const e of timeline) rows.append(repoRow(e));
+
+  const failed = ['commit', 'pull_request', 'issue', 'workflow_run']
+    .map((k) => sectionOf(repo, k))
+    .filter((s) => s && !s.ok);
+  const empty = $('repo-empty');
+  if (timeline.length === 0) {
+    empty.hidden = false;
+    empty.textContent = failed.length
+      ? failed[0].error
+      : 'No timestamped repository activity was returned.';
+  } else {
+    empty.hidden = failed.length === 0;
+    if (failed.length) empty.textContent = `Partly unavailable — ${failed[0].error}`;
+  }
+
+  // Contributors: real logins and the contribution counts GitHub reports. No
+  // e-mail, avatar or role — the source does not give them here and we do not
+  // fetch them, so none can be shown. These are GitHub accounts, deliberately
+  // NOT merged into workspace membership: they are different identity systems.
+  const people = $('repo-contributors');
+  people.textContent = '';
+  const contributors = sectionOf(repo, 'contributor');
+  if (contributors?.ok) {
+    for (const c of contributors.entities) {
+      const li = document.createElement('li');
+      li.className = 'tm-row';
+      const chip = document.createElement('span');
+      chip.className = 'tm-chip';
+      chip.textContent = (c.title || '?').charAt(0).toUpperCase();
+      const nm = document.createElement('span');
+      nm.className = 'tm-name';
+      if (c.url) {
+        const a = document.createElement('a');
+        a.href = c.url;
+        a.target = '_blank';
+        a.rel = 'noreferrer noopener';
+        a.textContent = c.title;
+        nm.append(a);
+      } else {
+        nm.textContent = c.title;
+      }
+      const n = document.createElement('span');
+      n.className = 'tm-you label';
+      const commits = c.detail?.contributions;
+      n.textContent = typeof commits === 'number' ? `${commits} commits` : '';
+      li.append(chip, nm, n);
+      people.append(li);
+    }
+    if (contributors.entities.length === 0) {
+      const li = document.createElement('li');
+      li.className = 'rail-quiet';
+      li.textContent = 'GitHub reported no contributors for this repository.';
+      people.append(li);
+    }
+  } else {
+    const li = document.createElement('li');
+    li.className = 'rail-quiet';
+    li.textContent = contributors?.error ?? 'Contributors unavailable.';
+    people.append(li);
+  }
+
+  // CI: what the Actions API actually reports. Zero runs is a real answer and
+  // is stated as zero runs — never as a green tick, and never as a failure.
+  const ci = sectionOf(repo, 'workflow_run');
+  const ciEl = $('repo-ci');
+  if (!ci?.ok) {
+    ciEl.textContent = ci?.error ?? 'Workflow status unavailable.';
+    ciEl.className = 'repo-ci off';
+  } else if ((ci.total ?? ci.entities.length) === 0) {
+    ciEl.textContent = 'No workflow runs recorded for this repository.';
+    ciEl.className = 'repo-ci off';
+  } else {
+    const latest = ci.entities[0];
+    ciEl.textContent =
+      `${latest.title || 'workflow'} · ${latest.state ?? 'unknown'}` +
+      `${latest.detail?.branch ? ` · ${latest.detail.branch}` : ''} · ${istStamp(latest.at)}` +
+      ` (${ci.total} run${ci.total === 1 ? '' : 's'})`;
+    ciEl.className = `repo-ci ${latest.state === 'success' ? 'ok' : latest.state === 'failure' ? 'err' : ''}`;
+  }
+
+  // The internal object this repository is anchored to — resolved by the server
+  // through the same VisibilityPolicy as every other read, so it can only name
+  // an object this principal may already open. Clicking it uses the one
+  // selection path every other surface uses, so the repository panel, the map
+  // and the inspector all lead to the same object (T3.3.11).
+  const linked = $('repo-linked');
+  linked.textContent = '';
+  $('repo-link-label').hidden = repo.links.length === 0;
+  for (const l of repo.links) {
+    const li = document.createElement('li');
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    btn.className = 'repo-link-row';
+    btn.textContent = l.objectTitle || '(untitled)';
+    const k = document.createElement('span');
+    k.className = 'rk label';
+    k.textContent = l.objectType;
+    btn.append(k);
+    btn.onclick = () => goTo(l.objectId);
+    li.append(btn);
+    linked.append(li);
+  }
+
+  // Freshness and provenance, always stated: which source, how it authenticated,
+  // and the instant the network read completed — not the instant of this render.
+  const fetched = istStamp(repo.fetchedAt);
+  $('repo-foot').textContent = repo.stale
+    ? `Showing the last successful read (${fetched} IST). Refresh failed: ${repo.staleReason}`
+    : `${repo.source} · ${repo.authMode} · read ${fetched} IST. External activity only — DEVWORKSPACE objects are not created from it.`;
+}
+
+/* ----------------------------------------------------- routines (T3.3.4) --- */
+//
+// Real background-execution records, or a truthful empty state. Nothing here
+// invents a schedule, a fire time or a next run, because the product has no
+// clock-based scheduler — and nothing infers whether a worker process is alive,
+// because the datastore cannot observe that. A pending row means the row has
+// not been delivered; that is a fact about the queue, and it is all that is said.
+
+const RUN_STATE_LABEL = {
+  delivered: 'Delivered',
+  pending: 'Pending',
+  dead_lettered: 'Dead-lettered',
+};
+
+async function loadWorker() {
+  const body = $('routine-rows');
+  const note = $('routines-note');
+  const tag = $('routines-state');
+  if (!body) return;
+  body.textContent = '';
+
+  let w;
+  try {
+    w = await api('/api/system/worker');
+  } catch (err) {
+    tag.textContent = 'Unavailable';
+    tag.className = 'meta tag offline';
+    note.textContent =
+      err.status === 401
+        ? 'Not authenticated, so no execution records were requested.'
+        : `Execution records could not be read: ${err.message}`;
+    return;
+  }
+  state.worker = w;
+
+  tag.textContent = `${w.delivered} run${w.delivered === 1 ? '' : 's'}`;
+  tag.className = `meta tag${w.deadLettered > 0 ? ' err' : w.pending > 0 ? ' warn' : ' live'}`;
+
+  for (const r of w.runs) {
+    const tr = document.createElement('tr');
+    tr.className = r.state === 'delivered' ? 'past' : '';
+    const t = document.createElement('td');
+    t.className = 't mono';
+    t.textContent = istStamp(r.at);
+    const c = document.createElement('td');
+    c.className = 'cx';
+    // The registered consumer, or the plain truth that none handles this event.
+    c.textContent = r.routine ?? 'no registered consumer';
+    const sub = document.createElement('span');
+    sub.className = 'rx mono';
+    sub.textContent = r.objectTitle ? `${r.event} · ${r.objectTitle}` : r.event;
+    c.append(document.createElement('br'), sub);
+    const s = document.createElement('td');
+    s.className = 'st';
+    s.textContent = RUN_STATE_LABEL[r.state] ?? r.state;
+
+    tr.append(t, c, s);
+    // Cross-surface identity: a run names a real object, and opening it goes
+    // through the same reveal path the graph, search and the inspector use.
+    if (r.objectId) {
+      tr.setAttribute('role', 'button');
+      tr.setAttribute('tabindex', '0');
+      tr.setAttribute('aria-label', `Open ${r.objectTitle} in the Second Brain`);
+      const go = () => goTo(r.objectId);
+      tr.addEventListener('click', go);
+      tr.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter' || e.key === ' ') {
+          e.preventDefault();
+          go();
+        }
+      });
+    } else {
+      tr.classList.add('inert');
+    }
+    body.append(tr);
+  }
+
+  const engine =
+    `Execution records from the outbox worker — event-driven, polling every ` +
+    `${w.pollIntervalMs} ms. DEVWORKSPACE has no clock-based scheduler, so no ` +
+    `routine has a fire time or a next run.`;
+  if (w.runs.length === 0) {
+    note.textContent = `No background execution has been recorded for context you can see. ${engine}`;
+  } else {
+    const pending = w.pending
+      ? ` ${w.pending} event${w.pending === 1 ? '' : 's'} queued and not yet drained.`
+      : '';
+    const dead = w.deadLettered ? ` ${w.deadLettered} dead-lettered.` : '';
+    note.textContent =
+      `${w.delivered} delivered${w.lastDeliveredAt ? `, last ${istStamp(w.lastDeliveredAt)} IST` : ''}.` +
+      `${pending}${dead} ${engine}`;
   }
 }
 
@@ -388,6 +869,9 @@ function closeInspector() {
   $('ins-body').hidden = true;
   $('why-sum').textContent = '';
   $('why-list').textContent = '';
+  $('ins-src').textContent = '';
+  $('ins-src').hidden = true;
+  $('ins-src-label').hidden = true;
   $('ctx-list').textContent = '';
   $('rel-list').textContent = '';
   $('ins-children-label').hidden = true;
@@ -428,6 +912,8 @@ async function openInspector(node) {
   $('ctx-empty').hidden = true;
   $('rel-empty').hidden = true;
   $('ins-children-label').hidden = true;
+  $('ins-src').hidden = true;
+  $('ins-src-label').hidden = true;
 
   if (!$('askp').hidden) $('ask-scope').textContent = `Scoped to: ${node.title || '(untitled)'}`;
 
@@ -468,6 +954,8 @@ async function openInspector(node) {
       $('ins-body').hidden = false;
     }
 
+    renderExternalSource(o);
+
     if (detail.children.length > 0 || o.type === 'project') {
       $('ins-children-label').hidden = false;
       $('ins-children-label').textContent = 'Captured context';
@@ -506,6 +994,50 @@ async function openInspector(node) {
         : err.message;
     $('cap-submit').disabled = true;
   }
+}
+
+/**
+ * The external identity this object is anchored to, when it records one
+ * (T3.3.1).
+ *
+ * It states the relationship precisely, because the distinction is the whole
+ * point: the OBJECT is ours and is the system of record for its own title,
+ * body, relationships and captured context; the ACTIVITY at the far end
+ * belongs to GitHub and is read live. The reference itself is shown verbatim,
+ * so the join is inspectable rather than implied.
+ */
+function renderExternalSource(o) {
+  const ref = o?.attributes?.externalRef;
+  const host = $('ins-src');
+  const label = $('ins-src-label');
+  if (typeof ref !== 'string' || !ref) {
+    host.hidden = true;
+    label.hidden = true;
+    return;
+  }
+  host.textContent = '';
+  const code = document.createElement('code');
+  code.className = 'mono';
+  code.textContent = ref;
+  host.append(code);
+
+  const url = typeof o.attributes?.externalUrl === 'string' ? o.attributes.externalUrl : null;
+  if (url) {
+    const a = document.createElement('a');
+    a.href = url;
+    a.target = '_blank';
+    a.rel = 'noreferrer noopener';
+    a.textContent = 'open on GitHub ↗';
+    host.append(a);
+  }
+  const note = document.createElement('span');
+  note.className = 'src-note';
+  note.textContent =
+    'This object is the system of record. Activity at the source is read live and never copied into it.';
+  host.append(note);
+
+  host.hidden = false;
+  label.hidden = false;
 }
 
 /**
@@ -1069,12 +1601,19 @@ function taskProposalRow(proposal, fallbackProjectId) {
   return li;
 }
 
+/**
+ * Run the assistant and REPORT THE OUTCOME to the caller (T3.3.5).
+ *
+ * Returns `{ ok, note?, detail? }` so a Skills card can show that its run
+ * actually succeeded or actually failed, rather than returning to rest and
+ * leaving the user to assume it worked.
+ */
 async function runAsk(question) {
-  if (state.ask.busy) return;
+  if (state.ask.busy) return { ok: false, detail: 'already running' };
   const q = String(question ?? '').trim();
   if (!q) {
     setAskStatus('Ask a question.', 'err');
-    return;
+    return { ok: false, detail: 'no question' };
   }
   state.ask.busy = true;
   $('ask-submit').disabled = true;
@@ -1094,13 +1633,12 @@ async function runAsk(question) {
     const data = await res.json();
     if (!data.ok) {
       $('ask-out').hidden = true;
-      setAskStatus(
+      const detail =
         data.stage === 'context'
           ? `Context unavailable: ${data.detail}`
-          : `Model unavailable: ${data.detail}`,
-        'err',
-      );
-      return;
+          : `Model unavailable: ${data.detail}`;
+      setAskStatus(detail, 'err');
+      return { ok: false, detail: data.detail ?? detail };
     }
     state.ask.result = data;
     renderAsk(data);
@@ -1109,9 +1647,17 @@ async function runAsk(question) {
     setAskStatus(`${data.intent} · ${providerName(data.provider)}`, 'ok');
     $('ask-provider').textContent =
       `${providerName(data.provider).toUpperCase()} · ${data.weightSetVersion}`;
+    // The note names what the run actually produced — grounded in real evidence,
+    // or an answer with none. It never reports "done" for an ungrounded answer
+    // as though it were the same result.
+    return {
+      ok: true,
+      note: data.grounded ? `grounded in ${data.citations.length}` : 'ungrounded',
+    };
   } catch (err) {
     $('ask-out').hidden = true;
     setAskStatus(`Assistant unreachable: ${err.message}`, 'err');
+    return { ok: false, detail: 'assistant unreachable' };
   } finally {
     state.ask.busy = false;
     $('ask-submit').disabled = false;
@@ -1203,32 +1749,66 @@ function wireGraphControls() {
   });
 }
 
-/** Options are the workspace's REAL members once they have loaded; until then,
- *  the two dev-auth principals the boundary demo is built around. */
+/**
+ * Options are the workspace's REAL members, read from the server (T3.3.2).
+ *
+ * There is no client-side fallback list any more: the demo principals that
+ * used to fill this control before the members loaded are gone, and inventing
+ * a stand-in would be exactly the fabrication this milestone removes. Until the
+ * real members arrive the control states that it is still resolving.
+ */
 function renderPrincipalOptions() {
   const sel = $('principal');
-  const options = state.members.length
-    ? state.members.map((m) => ({ id: m.id, label: m.displayName }))
-    : KNOWN_PRINCIPALS;
-  sel.innerHTML = '';
-  for (const p of options) {
+  sel.textContent = '';
+  if (state.members.length === 0) {
     const o = document.createElement('option');
-    o.value = p.id;
-    o.textContent = p.label;
-    if (p.id === state.principalId) o.selected = true;
+    o.value = state.principalId;
+    o.textContent = state.me?.displayName ?? 'resolving…';
+    sel.append(o);
+    return;
+  }
+  for (const m of state.members) {
+    const o = document.createElement('option');
+    o.value = m.id;
+    o.textContent = m.displayName;
+    if (m.id === state.principalId) o.selected = true;
     sel.append(o);
   }
+}
+
+/** The identity actually in force, as the SERVER reported it. */
+function renderIdentity() {
+  const name = state.me?.displayName ?? null;
+  $('brand-id').textContent = name ? `${name} | Workspace` : 'Not authenticated';
+}
+
+/**
+ * Who the current credential resolves to. Asked of the server rather than
+ * assumed from a local table, so the header can never show an identity the
+ * datastore would not agree with.
+ */
+async function loadMe() {
+  try {
+    state.me = await api('/api/me');
+  } catch {
+    state.me = null;
+  }
+  renderIdentity();
+  renderPrincipalOptions();
 }
 
 function wirePrincipal() {
   const sel = $('principal');
   renderPrincipalOptions();
-  sel.onchange = () => {
+  sel.onchange = async () => {
     state.principalId = sel.value;
     localStorage.setItem('dc.principalId', state.principalId);
     state.selected = null;
     view.select(null);
-    loadGraph({ keepSelection: false });
+    // Everything scoped to a principal is re-read together, so no panel can be
+    // left showing the previous identity's data.
+    await loadMe();
+    await Promise.all([loadGraph({ keepSelection: false }), loadRepository(), loadWorker()]);
   };
 }
 
@@ -1279,6 +1859,10 @@ function wireCapture() {
       $('note-title').value = '';
       $('note-body').value = '';
       await loadGraph();
+      // A capture writes a real outbox event in the same transaction, so the
+      // Routines surface has genuinely changed and is re-read rather than left
+      // showing a stale queue.
+      loadWorker();
       // CAPTURE → CONNECT: the new object appears in the graph, already anchored.
       // Reported after the reload, which repaints the inspector.
       if (note?.id) view.setMatches([note.id]);
@@ -1359,9 +1943,6 @@ function wireChrome() {
 // hardcoded — the date, the weekday, the ISO week, the month matrix and the
 // year grid are all derived from the same instant, in the same zone, so they
 // can never disagree with each other or drift apart across midnight.
-
-const TZ = 'Asia/Kolkata';
-const TZ_LABEL = 'IST · INDIA';
 
 /** The wall-clock fields of `date` as they read in `TZ`. */
 function zoned(date, tz = TZ) {
@@ -1447,6 +2028,10 @@ function startClock() {
       `WK${isoWeek(z)} | ${MONTHS_SHORT[z.month - 1]} ${z.day} ${z.year} (${z.weekday})`;
     $('clock-utc').textContent = 'UTC+05:30';
     $('cal-today').textContent = 'today';
+    // The zone label comes from the same constant every formatter uses, so the
+    // label and the numbers can never name different zones.
+    const zone = document.querySelector('.clock-z .z');
+    if (zone) zone.textContent = TZ_LABEL;
     renderCalMatrix(z);
     renderQGrid(z);
   };
@@ -1489,9 +2074,7 @@ async function loadMembers() {
     host.append(li);
   }
   renderPrincipalOptions();
-  if (state.graph?.stats) {
-    $('brand-id').textContent = `${principalLabel(state.principalId)} | Workspace`;
-  }
+  renderIdentity();
 }
 
 /* ----------------------------------------------------- workflows (right rail) */
@@ -1505,17 +2088,41 @@ function wireWorkflows() {
   // Second Brain's inner ring and these cards — so a capability cannot behave
   // differently depending on where it was pressed.
   const run = {
-    'flow-capture': () => runCapability('capture'),
-    'flow-ask': () => runCapability('ask'),
-    'flow-summarize': () => runCapability('summarize'),
-    'flow-extract': () => runCapability('extract'),
+    'flow-capture': 'capture',
+    'flow-ask': 'ask',
+    'flow-summarize': 'summarize',
+    'flow-extract': 'extract',
   };
-  for (const [id, go] of Object.entries(run)) {
+  for (const [id, capability] of Object.entries(run)) {
     const e = $(id);
     if (!e) continue;
-    e.addEventListener('click', () => {
+    e.addEventListener('click', async () => {
+      // A disabled card must actually refuse, not merely look disabled.
+      if (e.getAttribute('aria-disabled') === 'true') return;
       document.body.classList.remove('drawer-left', 'drawer-right');
-      go();
+
+      const slot = e.querySelector('[data-state]');
+      // Only a capability that genuinely executes gets a running state. Opening
+      // a panel is reported as opening a panel — timing it would dress
+      // navigation up as work (T3.3.5).
+      const willRun = capability === 'summarize' || capability === 'extract';
+      const reporter = willRun ? skillRun(id) : null;
+      try {
+        const outcome = await runCapability(capability);
+        if (reporter) {
+          if (outcome?.ok) reporter.ok(outcome.note ?? 'done');
+          else reporter.fail(outcome?.detail ?? 'no result');
+        } else if (slot) {
+          slot.textContent = outcome?.note ?? '';
+          slot.className = 'sk-state mono';
+        }
+      } catch (err) {
+        if (reporter) reporter.fail(err.message);
+        else if (slot) {
+          slot.textContent = `failed · ${err.message}`;
+          slot.className = 'sk-state mono err';
+        }
+      }
     });
     e.addEventListener('keydown', (ev) => {
       if (ev.key === 'Enter' || ev.key === ' ') {
@@ -1536,7 +2143,13 @@ wireCapture();
 wireWorkflows();
 wireChrome();
 startClock();
+// Assistant-backed Skills start disabled and are enabled only once the service
+// actually answers — the default state is the honest one (T3.3.5).
+setSkillsAvailability(false);
 probeAssistant();
 closeInspector();
+loadMe();
 loadMembers();
 loadGraph({ keepSelection: false });
+loadRepository();
+loadWorker();

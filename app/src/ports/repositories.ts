@@ -47,6 +47,16 @@ export interface ObjectRepository {
     scope: ResolvedScope,
     projectId: ProjectId,
   ): Promise<WorkspaceObject[]>;
+  /**
+   * Visible objects anchored to one of `refs` through
+   * `object.attributes.externalRef` (T3.3.1) — the single join between an
+   * internal object and the external activity that concerns it. Filter-first,
+   * so an external reference can never surface an object the scope may not see.
+   */
+  listVisibleByExternalRef(
+    scope: ResolvedScope,
+    refs: readonly string[],
+  ): Promise<WorkspaceObject[]>;
   /** Visible projects in the scope's workspace. */
   listProjects(scope: ResolvedScope): Promise<WorkspaceObject[]>;
   /** Insert inside a transaction. */
@@ -123,4 +133,46 @@ export interface MemberRepository {
 export interface WorkspaceMember {
   readonly id: string;
   readonly displayName: string;
+}
+
+/**
+ * Background-execution telemetry, read-only (T3.3.4).
+ *
+ * DEVWORKSPACE has no cron scheduler, and none is invented. What it does have
+ * is a real background process — the outbox worker (P2.6 §13) — which polls,
+ * claims events with `SKIP LOCKED`, runs a consumer and records the outcome.
+ * Those recorded outcomes are genuine execution records with genuine
+ * timestamps, and they are the ONLY thing the Routines surface may display.
+ *
+ * Every row is scoped: an event is reported only when the object it concerns is
+ * visible to the caller under the same VisibilityPolicy as every other read. A
+ * member with no shares must not learn how much work another member's objects
+ * generated, so an unscoped count is not offered by this port at all.
+ */
+export interface WorkerRunRecord {
+  readonly id: string;
+  /** The real outbox event type, e.g. `object.created`. */
+  readonly type: string;
+  /** The object the event concerns, when it is visible to the caller. */
+  readonly objectId: string | null;
+  readonly objectTitle: string | null;
+  /** Derived from the row's own columns — never a guess about a live process. */
+  readonly state: 'delivered' | 'pending' | 'dead_lettered';
+  /** `delivered_at` for a delivered event, `created_at` otherwise. */
+  readonly at: string;
+  readonly attempts: number;
+}
+
+export interface WorkerTelemetry {
+  readonly delivered: number;
+  readonly pending: number;
+  readonly deadLettered: number;
+  /** The most recent real delivery, or null when nothing has been delivered. */
+  readonly lastDeliveredAt: string | null;
+  readonly runs: readonly WorkerRunRecord[];
+}
+
+export interface WorkerTelemetryRepository {
+  /** Execution records over objects this scope may see, most recent first. */
+  read(scope: ResolvedScope, limit?: number): Promise<WorkerTelemetry>;
 }

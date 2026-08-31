@@ -10,6 +10,9 @@
 
 import type { Tx } from '../../ports/repositories.ts';
 
+/** The consumer's own name, used wherever a run has to be attributed. */
+export const CONSUMER_NAME = 'fts-maintenance';
+
 export const CONSUMES = new Set(['object.created', 'object.updated', 'object.deleted']);
 
 interface Payload {

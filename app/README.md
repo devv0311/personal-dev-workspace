@@ -58,10 +58,19 @@ npm test
 npm run typecheck
 ```
 
-Open <http://localhost:4177>. Use the **Acting as** switcher:
+Open <http://localhost:4177>. Use the principal switcher (top right). Every
+option is a **real workspace member** — the demo principals `Alice` and `Bob`
+were removed at T3.3.2, and there is no client-side fallback list:
 
-- **Alice** owns the seeded projects — she can view them and capture into them.
-- **Bob** is a workspace member with **no** share — he sees nothing (deny-by-default).
+- **Sanchit** is the workspace's primary member and owns the seeded projects.
+- **Shourya** is a member with exactly **one** project share — everything else
+  is invisible to them (deny-by-default), which is what makes the authorization
+  boundary demonstrable without an invented user.
+- **Dev**, **Aatika**, **Ananya** are members with no shares.
+
+The identity shown in the header is answered by the server (`GET /api/me`) from
+the principal row the presented credential resolved to — the client never names
+a user it has not been told about.
 
 ## What is real vs. mocked
 
@@ -73,8 +82,38 @@ Open <http://localhost:4177>. Use the **Acting as** switcher:
 | First-class `relationship` edges + synthesised `belongs_to` read model | — |
 | Transactional outbox + state-based idempotent worker consumer | — |
 | Capture → persist → associate → display workflow | — |
+| **GitHub repository activity** — read live from the REST API per request (T3.3.1). No activity is seeded, cached in the page or replayed from a fixture. | — |
+| **Background execution records** — real outbox-worker outcomes with real timestamps, scoped by the same policy as every other read (T3.3.4). | — |
 | — | **Authentication** — a `Authorization: Dev <principalId>` header maps to a seeded principal (`src/adapters/http/auth.ts`). This is **not** the final auth architecture (P2.5 §22 Q6). It exists only to exercise the authorization boundary. |
-| — | Seeded projects / one seeded note, so the project view is immediately non-empty. |
+| — | Seeded projects and notes, so the map is immediately non-empty. These are ordinary rows written through the real schema, not a display-only dataset. |
+| — | **Email** — no mail provider, connector or credential exists anywhere in the runtime. The surface renders `Not connected` with no count, message or timestamp (T3.3.3). |
+
+## External activity (T3.3.1)
+
+GitHub supplies **activity**. It is never the system of record for a
+DEVWORKSPACE object, and there is no import, sync or reconciliation path in the
+codebase — `readExternalActivity` reads, and writes nothing.
+
+- **Seam.** `ports/external-activity.ts` → `adapters/external/github.ts`. One
+  provider instance per process, so its TTL cache and in-flight de-duplication
+  are shared across requests.
+- **Route.** `GET /api/external/github`, behind the same authenticated-scope
+  gate as every other `/api/` read.
+- **The join.** An internal object may record `attributes.externalRef`
+  (e.g. `github:repository:devv0311/personal-dev-workspace`). The seed anchors
+  one real Project to this repository, and that anchor is the *only* GitHub-
+  related row ever persisted. Anchors are resolved through
+  `listVisibleByExternalRef`, which composes the ordinary `VisibilityPolicy`
+  fragment — so a public repository can never become a side channel into a
+  project the caller may not see.
+- **Honesty rules, enforced in code.** A total is reported only when the
+  response proves it exact (no `rel="next"`); a section that fails comes back
+  `{ ok: false, error }` and is rendered as that reason rather than as an empty
+  list; a failed refetch keeps the previous snapshot's `fetchedAt` and marks it
+  `stale`; `open_issues_count` is carried as `openIssuesAndPullRequests`
+  because GitHub counts PRs in it; the token never appears in a response.
+- **Credential.** `GITHUB_TOKEN` is optional. Anonymous reads work for a public
+  repository at a lower rate limit, and the UI states which mode is in use.
 
 ## Module boundaries (P2.6 §6)
 
@@ -501,6 +540,22 @@ reflow (§5.7); keyboard focus uses a dedicated `--focus` token, not a data hue.
 nor removed it — it was left functionally intact and only re-tokenised for
 colour conformance. Whether an assistant surface belongs in the shell is
 blueprint Q8, deferred to the AI-layer milestone's acceptance.
+
+## Live data + reference-system integration (T3.3)
+
+What each reference-derived surface now shows, and why:
+
+| Surface | State after T3.3 |
+|---|---|
+| **Repository** (new, right rail) | Live GitHub activity: repository metadata, contributors, commits, branches, pull requests, issues and workflow runs. Exact totals only; per-section failures stated; freshness, source and auth mode printed. Rows open the real entity on GitHub; the linked internal project opens on the map. |
+| **Email** | `Not connected`. No mail connector, credential or dependency exists in the runtime, so no count, message row or timestamp is shown — and none is invented. A provider integration was **not** built, because no mailbox authorization exists. |
+| **Routines** | Real background-execution records from the outbox worker: real event type, the consumer actually registered for it, the object it concerned, its state and its recorded timestamp. There is still **no clock-based scheduler**, so no row carries a fire time or a next run, and nothing infers whether a worker process is alive — `pending` is a fact about a row, not a claim about a process. |
+| **Skills Deck** | Executability is a state. `/capture` runs in the core and is always available; the three assistant skills are `aria-disabled`, removed from the tab order and refuse to run whenever the assistant does not answer `/healthz`. A run shows running, measured elapsed time, and success or failure. The dev stub is still named `dev stub`; no effort tier is shown, because the service exposes none. |
+| **Second Brain** | Unchanged in composition. Every semantic node remains a real persisted object; the inspector now also shows an object's **external source** (its stable reference and canonical URL) when it records one. |
+| **Micro Apps** | Unchanged — Capture, Second Brain, Ask Context, Spatial Search all delegate to real capabilities. No generated-artifact browser or asset gallery exists, so none is shown. |
+| **Living artifacts** | No artifact/output system exists in this build. Nothing is rendered rather than a synthetic gallery. |
+| **Particle field** | Unchanged decorative atmosphere. Carries no id, count, label or handler, so density is visual and never fabricated data. |
+| **Clock** | `Asia/Kolkata`, 12-hour with meridiem, ticking every second. T3.3.10 made the zone explicit on **every** formatter in the shell — the header clock, the activity table, repository timestamps and routine timestamps now share one zone rather than inheriting the device's. |
 
 ## Deferred (documented, not built here)
 

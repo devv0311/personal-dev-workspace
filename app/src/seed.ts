@@ -1,18 +1,35 @@
-// Deterministic development seed (P2.7 §7, §13).
+// Deterministic development seed (P2.7 §7, §13; identities revised at T3.3.2).
 // Fixed UUIDs so the dev UI and docs can reference stable ids.
 // Idempotent: safe to run repeatedly.
+//
+// T3.3.2 — DEMO IDENTITY REMOVAL.
+// The seed previously created two demo principals, "Alice" and "Bob", and made
+// Alice the owner of everything. They are gone. Every principal this seed
+// creates is a real member of the project group, and the authorization
+// demonstration that Alice/Bob existed for is preserved using those real
+// people instead: the workspace's primary member owns the projects, one project
+// is shared with a second real member, and the rest stay invisible to them.
+// Deny-by-default is demonstrated by real membership, not by invented users.
+//
+// What is still NOT recorded about anyone: e-mail, avatar, role, permission
+// tier, external account, contribution count or activity. The schema has no
+// column for them, so the seed writes none and no surface can imply otherwise.
+//
+// `Alice` and `Bob` remain in `test/helpers.ts`. That is a two-party
+// authorization FIXTURE inside the test suite, not production state, and
+// T3.3.12 preserves legitimate fixtures rather than deleting them.
 
 import { getPool, closePool } from './adapters/persistence/db.ts';
 import { config } from './config.ts';
+import { sourceRef } from './domain/external.ts';
 
 export const SEED = {
   workspaceId: '00000000-0000-4000-8000-000000000001',
-  // Alice — owner of the seeded project. Bob — a member with NO access to it.
-  alice: '00000000-0000-4000-8000-0000000000a1',
-  bob: '00000000-0000-4000-8000-0000000000b0',
   projectApi: '00000000-0000-4000-8000-000000000010',
   projectPrivate: '00000000-0000-4000-8000-000000000011',
   projectShared: '00000000-0000-4000-8000-000000000012',
+  /** The workspace's own repository, anchored to its real GitHub identity. */
+  projectRepo: '00000000-0000-4000-8000-000000000013',
   noteSeed: '00000000-0000-4000-8000-000000000100',
 } as const;
 
@@ -33,6 +50,37 @@ export const GROUP_MEMBERS: ReadonlyArray<readonly [string, string, string]> = [
   ['00000000-0000-4000-8000-0000000000d4', 'Aatika', 'dev:aatika'],
   ['00000000-0000-4000-8000-0000000000d5', 'Ananya', 'dev:ananya'],
 ] as const;
+
+const memberId = (name: string): string => {
+  const row = GROUP_MEMBERS.find((m) => m[1] === name);
+  if (!row) throw new Error(`seed: no such workspace member: ${name}`);
+  return row[0];
+};
+
+/**
+ * The workspace's primary principal — the identity the dev shell opens as, and
+ * the owner of the seeded projects. A real member of the group, not a stand-in.
+ */
+export const PRIMARY_PRINCIPAL = memberId('Sanchit');
+
+/**
+ * The second party in the authorization demonstration. Also a real member: they
+ * hold a workspace membership and exactly one project share, so the difference
+ * between "member of the workspace" and "can see this project" stays visible
+ * end to end without a demo identity.
+ */
+export const SHAREE_PRINCIPAL = memberId('Shourya');
+
+/**
+ * The external identity of this workspace's own repository (T3.3.1).
+ *
+ * This is the ONE join between the internal object model and external activity:
+ * a real Project object records this reference, and the repository surface
+ * resolves it back to that project. Nothing about the repository's activity is
+ * seeded — commits, branches, pull requests and CI are read live from GitHub at
+ * request time, or reported as unavailable. Only the anchor is persisted.
+ */
+export const REPO_SOURCE_REF = sourceRef('github', 'repository', config.githubRepository);
 
 const SEED_PROJECT = {
   api: SEED.projectApi,
@@ -84,28 +132,13 @@ export async function seed(): Promise<void> {
     await client.query('BEGIN');
 
     await client.query(
-      `INSERT INTO workspace (id, name) VALUES ($1, 'Demo Workspace')
+      `INSERT INTO workspace (id, name) VALUES ($1, 'DEVWORKSPACE')
        ON CONFLICT (id) DO NOTHING`,
       [SEED.workspaceId],
     );
 
-    for (const [id, name, subject] of [
-      [SEED.alice, 'Alice', 'dev:alice'],
-      [SEED.bob, 'Bob', 'dev:bob'],
-    ] as const) {
-      await client.query(
-        `INSERT INTO principal (id, workspace_id, auth_subject, display_name)
-         VALUES ($1, $2, $3, $4) ON CONFLICT (id) DO NOTHING`,
-        [id, SEED.workspaceId, subject, name],
-      );
-      await client.query(
-        `INSERT INTO workspace_membership (workspace_id, principal_id)
-         VALUES ($1, $2) ON CONFLICT DO NOTHING`,
-        [SEED.workspaceId, id],
-      );
-    }
-
-    // The real project group. Membership only — see GROUP_MEMBERS.
+    // The real project group, and nobody else. Membership only — see
+    // GROUP_MEMBERS. No demo principal is created (T3.3.2).
     for (const [id, name, subject] of GROUP_MEMBERS) {
       await client.query(
         `INSERT INTO principal (id, workspace_id, auth_subject, display_name)
@@ -119,8 +152,8 @@ export async function seed(): Promise<void> {
       );
     }
 
-    // Alice owns two projects. Bob is a workspace member but shares neither,
-    // so Bob must not see them (deny-by-default).
+    // The primary member owns the projects. Other members hold a workspace
+    // membership but no share, so they must not see them (deny-by-default).
     for (const [id, title] of [
       [SEED.projectApi, 'API Gateway Rework'],
       [SEED.projectPrivate, 'Personal Scratch'],
@@ -130,9 +163,31 @@ export async function seed(): Promise<void> {
         `INSERT INTO object (id, workspace_id, type, title, body, owner_id, created_by)
          VALUES ($1, $2, 'project', $3, '', $4, $4)
          ON CONFLICT (id) DO NOTHING`,
-        [id, SEED.workspaceId, title, SEED.alice],
+        [id, SEED.workspaceId, title, PRIMARY_PRINCIPAL],
       );
     }
+
+    // The workspace's own repository, as a real Project carrying the external
+    // identity it is anchored to (T3.3.1). This row is the ONLY thing about
+    // GitHub that is ever persisted: it is the join target, not a copy of the
+    // repository. Its commits, branches, pull requests and CI state are read
+    // live from GitHub when the surface is opened, and reported as unavailable
+    // when they cannot be — never seeded, never replayed from a fixture.
+    await client.query(
+      `INSERT INTO object (id, workspace_id, type, title, body, attributes, owner_id, created_by)
+       VALUES ($1, $2, 'project', $3, '', $4::jsonb, $5, $5)
+       ON CONFLICT (id) DO UPDATE SET attributes = EXCLUDED.attributes`,
+      [
+        SEED.projectRepo,
+        SEED.workspaceId,
+        config.githubRepository.split('/').pop() ?? config.githubRepository,
+        JSON.stringify({
+          externalRef: REPO_SOURCE_REF,
+          externalUrl: `https://github.com/${config.githubRepository}`,
+        }),
+        PRIMARY_PRINCIPAL,
+      ],
+    );
 
     // Captured context, so the graph has real nodes and real anchors from the
     // first load. Every one is an ordinary object row created the same way the
@@ -142,7 +197,7 @@ export async function seed(): Promise<void> {
         `INSERT INTO object (id, workspace_id, type, title, body, home_project_id, owner_id, created_by)
          VALUES ($1, $2, 'note', $3, $4, $5, $6, $6)
          ON CONFLICT (id) DO NOTHING`,
-        [id, SEED.workspaceId, title, body, projectId, SEED.alice],
+        [id, SEED.workspaceId, title, body, projectId, PRIMARY_PRINCIPAL],
       );
     }
 
@@ -165,16 +220,18 @@ export async function seed(): Promise<void> {
            SELECT 1 FROM relationship
             WHERE from_object_id = $2 AND to_object_id = $3 AND verb = $4
          )`,
-        [SEED.workspaceId, from, to, verb, SEED.alice, scope],
+        [SEED.workspaceId, from, to, verb, PRIMARY_PRINCIPAL, scope],
       );
     }
 
-    // Exactly one project is shared with Bob. The other two must stay invisible
-    // to him — that asymmetry is what makes the authorization boundary visible.
+    // Exactly one project is shared with the second member. The others must
+    // stay invisible to them — that asymmetry is what makes the authorization
+    // boundary visible, and it is now demonstrated between two real members
+    // rather than between two invented ones (T3.3.2).
     await client.query(
       `INSERT INTO project_share (workspace_id, project_id, principal_id, granted_by)
        VALUES ($1, $2, $3, $4) ON CONFLICT DO NOTHING`,
-      [SEED.workspaceId, SEED.projectShared, SEED.bob, SEED.alice],
+      [SEED.workspaceId, SEED.projectShared, SHAREE_PRINCIPAL, PRIMARY_PRINCIPAL],
     );
 
     for (const [id] of SEED_NOTES) {
@@ -197,14 +254,19 @@ export async function seed(): Promise<void> {
     client.release();
   }
 
+  const nameOf = (id: string) => GROUP_MEMBERS.find((m) => m[0] === id)?.[1] ?? id;
   console.log(
     `Seeded ${config.databaseUrl}\n` +
       `  workspace : ${SEED.workspaceId}\n` +
-      `  Alice     : ${SEED.alice}   (owns the projects — use as: Authorization: Dev ${SEED.alice})\n` +
-      `  Bob       : ${SEED.bob}   (member; sees ONLY the shared project)\n` +
-      `  projects  : ${SEED.projectApi}  "API Gateway Rework"      (Alice only)\n` +
-      `              ${SEED.projectPrivate}  "Personal Scratch"        (Alice only)\n` +
-      `              ${SEED.projectShared}  "Context Engine"          (shared with Bob)`,
+      `  members   : ${GROUP_MEMBERS.map((m) => m[1]).join(', ')}\n` +
+      `  primary   : ${nameOf(PRIMARY_PRINCIPAL)} ${PRIMARY_PRINCIPAL}\n` +
+      `              (owns the projects — use as: Authorization: Dev ${PRIMARY_PRINCIPAL})\n` +
+      `  sharee    : ${nameOf(SHAREE_PRINCIPAL)} ${SHAREE_PRINCIPAL}\n` +
+      `              (member; sees ONLY the shared project)\n` +
+      `  projects  : ${SEED.projectApi}  "API Gateway Rework"\n` +
+      `              ${SEED.projectPrivate}  "Personal Scratch"\n` +
+      `              ${SEED.projectShared}  "Context Engine"   (shared)\n` +
+      `              ${SEED.projectRepo}  repository anchor → ${REPO_SOURCE_REF}`,
   );
 }
 

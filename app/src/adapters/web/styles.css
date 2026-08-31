@@ -1283,3 +1283,91 @@ body[data-view="brain"] .field-wrap .field-readout.tl { display: none; }
 .cr-marker { stroke: rgba(255, 255, 255, 0.12); }
 .cr-hair   { stroke: rgba(255, 255, 255, 0.06); }
 .cr-guide  { stroke: rgba(255, 255, 255, 0.05); }
+
+/* =============================================================================
+   T3.3 — LIVE DATA SURFACES
+
+   Three new states join the rail vocabulary, and each one is a WORD as well as
+   a colour (§4.13): `Live` / `Stale` / `Unavailable` on the Repository header,
+   `Pending` / `Dead-lettered` in Routines, and `running` / `failed` on a Skills
+   card. Nothing below introduces a decorative treatment: every element here
+   exists to state the provenance or the freshness of something real.
+   ========================================================================== */
+
+/* ---- repository (external activity, read live) --------------------------- */
+.tag.live { color: var(--ok); }
+.tag.warn { color: var(--warn); }
+.tag.err  { color: var(--error); }
+
+.repo-id {
+  display: flex; flex-direction: column; gap: 2px;
+  text-decoration: none; margin-bottom: var(--s3);
+}
+.repo-name { color: var(--ink); font-size: 11.5px; letter-spacing: 0.01em; }
+.repo-id:hover .repo-name, .repo-id:focus-visible .repo-name { color: var(--action); }
+.repo-sub { color: var(--ink-ghost); font-size: 9px; letter-spacing: 0.05em; }
+
+/* These labels are longer than Project Pulse's, so the figure sits ABOVE its
+   label rather than beside it — a wrapping label must never push the number it
+   belongs to out of line. Scoped, so Project Pulse keeps its inline treatment. */
+.repo-metrics .pm { display: flex; flex-direction: column; align-items: flex-start; gap: 2px; }
+.repo-metrics .pm .l { margin-top: 0; }
+
+/* A second line inside a table cell: what kind of thing it was and who did it.
+   Present only when the source actually reported those fields. */
+.ttable .cx .rx { color: var(--ink-ghost); font-size: 8.5px; letter-spacing: 0.04em; }
+/* A row with no URL / no object behind it is not pretending to be pressable. */
+.ttable tbody tr.inert { cursor: default; }
+.ttable tbody tr.inert:hover .cx { color: var(--ink-dim); }
+
+.repo-ci {
+  color: var(--ink-dim); font-size: 10px; line-height: 1.45;
+  padding: 4px 0 var(--s2);
+}
+.repo-ci.off { color: var(--ink-ghost); }
+.repo-ci.ok  { color: var(--ok); }
+.repo-ci.err { color: var(--error); }
+
+.repo-links { list-style: none; margin: 2px 0 0; padding: 0; }
+.repo-link-row {
+  display: flex; align-items: baseline; gap: var(--s2); width: 100%;
+  background: none; border: 0; padding: 5px 0; text-align: left; cursor: pointer;
+  color: var(--ink-dim); font: 400 10.5px/1.35 var(--font-ui);
+  border-top: 1px solid var(--hair-faint);
+}
+.repo-links li:first-child .repo-link-row { border-top: none; }
+.repo-link-row:hover, .repo-link-row:focus-visible { color: var(--action); outline: none; }
+.repo-link-row .rk { margin-left: auto; color: var(--ink-ghost); }
+
+.rail .team a { color: inherit; text-decoration: none; }
+.rail .team a:hover, .rail .team a:focus-visible { color: var(--action); }
+
+/* ---- inspector: the external anchor -------------------------------------- */
+.ins-src {
+  display: flex; flex-direction: column; gap: 3px;
+  padding-left: 9px; border-left: 1px solid var(--hair-2);
+  margin: 4px 0 var(--s3);
+}
+.ins-src code { color: var(--ink-dim); font-size: 9px; letter-spacing: 0.02em; overflow-wrap: anywhere; }
+.ins-src a { color: var(--action); font-size: 9.5px; text-decoration: none; width: fit-content; }
+.ins-src a:hover, .ins-src a:focus-visible { text-decoration: underline; }
+.ins-src .src-note { color: var(--ink-ghost); font-size: 9px; line-height: 1.45; }
+
+/* ---- Skills: executability is a state ------------------------------------ */
+.skill .sk-state {
+  grid-column: 1 / -1; font-size: 7.5px; letter-spacing: 0.08em;
+  text-transform: uppercase; color: var(--ink-ghost); min-height: 10px;
+}
+.skill .sk-state.busy { color: var(--action); }
+.skill .sk-state.ok   { color: var(--ok); }
+.skill .sk-state.err  { color: var(--error); }
+.skill .sk-state.off  { color: var(--ink-ghost); }
+/* An unavailable skill LOOKS unavailable and REFUSES to run: the class is
+   cosmetic, `aria-disabled` and the handler's own guard are the behaviour. */
+.skill.unavailable { opacity: 0.45; }
+.skill.unavailable.click { cursor: not-allowed; }
+.skill.unavailable.click:hover, .skill.unavailable.click:focus-visible {
+  border-color: var(--hair-2); background: rgba(255, 255, 255, 0.022);
+}
+.skill.unavailable.click:hover .cmd, .skill.unavailable.click:focus-visible .cmd { color: var(--ink); }
+.skill.unavailable .run { color: var(--ink-ghost); }

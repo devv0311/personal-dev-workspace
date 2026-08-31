@@ -48,4 +48,19 @@ export const config = {
   coreContextApiUrl: process.env.CORE_CONTEXT_API_URL ?? 'http://127.0.0.1:4177',
   /** Browser origin allowed to call the assistant in dev. */
   assistantAllowedOrigin: process.env.ASSISTANT_ALLOWED_ORIGIN ?? 'http://localhost:4177',
+
+  // --- T3.3 external activity (GitHub) -------------------------------------
+  // The repository whose activity this workspace tracks. Naming a repository is
+  // configuration; the ACTIVITY is always read live from the source and is
+  // never hardcoded, seeded or replayed from a fixture.
+  githubRepository: process.env.GITHUB_REPOSITORY ?? 'devv0311/personal-dev-workspace',
+  /**
+   * Optional credential. Absent is a supported mode, not a broken one: a public
+   * repository reads anonymously at a lower rate limit, and the UI states which
+   * mode is in use. The token is read here, used only by the server-side
+   * adapter, and never included in any response.
+   */
+  githubToken: process.env.GITHUB_TOKEN ?? null,
+  /** How long a successful snapshot is reused before the source is re-read. */
+  githubCacheTtlMs: Number(process.env.GITHUB_CACHE_TTL_MS ?? 300_000),
 } as const;

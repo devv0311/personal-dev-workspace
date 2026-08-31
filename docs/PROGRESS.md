@@ -390,7 +390,173 @@ the backend was altered.
 
 ### Open
 
-- Email and Routines remain preview surfaces until a mail integration and a
-  scheduler exist.
+- Email remains a preview surface until a mail integration exists. (Routines was
+  connected to real worker telemetry at T3.3.4 — see below.)
 - The header's search and Second-Brain controls are hidden below 720 px; both
   stay reachable from Micro Apps, and `/` still opens search.
+
+---
+
+## T3.3 — Live Data + Reference-System Integration
+
+**Status:** IMPLEMENTED — awaiting review. Not self-accepted.
+**Branch:** `feature/t3.3-live-data` (cut from `main` at `cc3c1b0`).
+**Date:** 2026-08-31.
+**Authoritative external repository:** `devv0311/personal-dev-workspace`.
+
+The reference-replicated composition is unchanged. No panel was redesigned, no
+capability invented, and the UI was not simplified toward a conventional SaaS
+dashboard. What changed is what the surfaces are *fed*.
+
+### T3.3.1 — GitHub live data
+
+A read-only external-activity seam, built to the existing hexagonal shape rather
+than as a parallel data model: `domain/external.ts` (pure) → `ports/
+external-activity.ts` → `adapters/external/github.ts` → `application/
+external-activity.ts` → `GET /api/external/github`.
+
+- **Live, never seeded.** Repository metadata, contributors, commits, branches,
+  pull requests, issues and workflow runs are read from the REST API per request
+  (TTL-cached in-process). There is no fixture path in production and no code
+  that could serve one.
+- **GitHub is not the system of record.** The use case reads; it has no write.
+  A test asserts the object count is unchanged across a read.
+- **Stable external identity.** `github:<kind>:<externalId>` — SHA, PR number,
+  login, `owner/repo`. Preserved on every row, and parsed back symmetrically
+  (a repository id contains a slash, and the parser does not split on it).
+- **The join.** An internal object records `attributes.externalRef`; the seed
+  anchors one real Project to this repository. That anchor is the *only*
+  GitHub-related row ever persisted. Anchors resolve through
+  `ObjectRepository.listVisibleByExternalRef`, which composes the same
+  `VisibilityPolicy` fragment as every other read (INV-3) — verified: the
+  project's owner sees the link, a member without the share does not, and
+  granting the share makes it appear.
+- **Counts are exact or absent.** GitHub paginates without a total, so a total
+  is reported only when the response carries no `rel="next"`; otherwise `null`,
+  which the UI renders as an em dash. `open_issues_count` counts pull requests
+  as well, so it is carried as `openIssuesAndPullRequests` and no surface can
+  print it as an issue count. Pull requests are filtered out of `/issues`.
+- **Unavailability is a distinct state.** Sections fail independently and carry
+  the source's own reason; a failed refetch preserves the previous snapshot's
+  `fetchedAt` and marks it `stale` rather than advancing its age. The UI states
+  source, auth mode and read time on every render.
+- **Observed live at implementation time:** 1 contributor (54 commits), 19
+  branches, 18 pull requests (0 open / 18 merged), 0 issues, 0 workflow runs —
+  so CI reads "No workflow runs recorded for this repository", not a green tick.
+
+### T3.3.2 — Demo identity cleanup
+
+`Alice` and `Bob` are removed from all production data and UI. The seed creates
+only real project-group members; the primary member owns the projects and one
+project is shared with a second real member, so **deny-by-default is now
+demonstrated between real people** rather than invented ones. The client's
+`KNOWN_PRINCIPALS` label table is deleted; the principal switcher is populated
+from `/api/workspace/members` and the header identity comes from `/api/me`,
+which the server answers from the principal row the credential resolved to. One
+bootstrap principal id remains in the client — a real member, used only to
+present a first dev-auth credential. No e-mail, avatar, role, permission or team
+membership is invented for anyone. `Alice`/`Bob` are **retained in
+`test/helpers.ts`** as a two-party authorization fixture, per T3.3.12's
+instruction to preserve legitimate fixtures.
+
+### T3.3.3 — Email
+
+Inspected first: the runtime has **no** mail connector, credential, auth
+boundary or dependency. No provider-specific integration was built, because no
+mailbox authorization exists. The surface keeps its reference structure and its
+explicit `Not connected` state, with no count, message row or timestamp.
+
+### T3.3.4 — Routines / telemetry
+
+Inspection found real telemetry that had been overlooked: the outbox worker
+(P2.6 §13) records genuine execution outcomes — `delivered_at`, `attempts`,
+`dead_lettered` — against real events. Routines now shows those records: real
+event type, the consumer actually registered for it (read from the same
+`CONSUMES` set the worker dispatches on, so a run cannot be misattributed), the
+object it concerned, its state and its recorded timestamp.
+
+Two deliberate restraints. **No schedule is invented** — there is still no
+clock-based scheduler, so no row carries a fire time or a next run, and the
+payload says `scheduled: false`. **Process liveness is not inferred** — the
+datastore cannot observe whether a worker is running, so `pending` is reported
+as a fact about a row, never as "the worker is down".
+
+The read is scoped: an outbox row names an object, and an unscoped count would
+tell a member with no shares how much work another member's invisible objects
+generated. Rows *and counts* pass through the visibility fragment — verified
+(owner 10 delivered, sharee 3, with no invisible title anywhere in the payload).
+
+### T3.3.5 — Skills Deck
+
+Reference styling preserved; executability made a state. `/capture` runs in the
+core and is always available. The three assistant skills are disabled —
+`aria-disabled`, out of the tab order, and refused by the handler — whenever the
+assistant does not answer `/healthz`, with the reason in words on the card. A
+real run reports running, measured elapsed time, and success or failure
+(`grounded in N`, or the failure reason). The dev stub is still called `dev
+stub`; no effort tier is shown, because the service exposes none. `FAKE ·
+DETERMINISTIC-FAKE-1` remains absent.
+
+### T3.3.6 / T3.3.9 — Living artifacts and Micro Apps
+
+Inspected: **no artifact/output system exists** in this build, and Micro Apps
+contains only Capture, Second Brain, Ask Context and Spatial Search — all
+backed by real capabilities. No `Generations` gallery or `Landing Pad` exists,
+so none was created; the truthful state is their absence, and no placeholder
+gallery was added to fill the space.
+
+### T3.3.7 / T3.3.8 — Particle field and Second Brain
+
+Both preserved. Decorative particles carry no id, count, label or handler and
+remain distinct from semantic nodes; the radial/sector projection, interactions
+and reduced-motion handling are untouched. Every semantic node is still a real
+persisted object; the inspector additionally shows an object's **external
+source** — its stable reference and canonical URL — when it records one.
+
+### T3.3.10 — India time
+
+Already `Asia/Kolkata`, 12-hour, live. T3.3 made the zone **explicit on every
+formatter**: the inspector's dates, the activity table, repository timestamps
+and routine timestamps previously inherited the device zone. One `TZ` constant
+now drives all of them and the zone label. No `Sydney` / `AEST` reference exists
+anywhere in the repository.
+
+### T3.3.11 — Cross-surface object identity
+
+Preserved and extended. The Repository panel's linked object and every Routines
+row feed their id into the same `revealAndFocus` path the graph, search, the
+inspector and Project Pulse already use. Verified in the browser: Repository →
+Second Brain → Inspector resolves to one object, with Project Pulse and the
+header context following it.
+
+### T3.3.12 — Data honesty audit
+
+Swept for `Alice`, `Bob`, `fake`, `mock`, `demo`, `deterministic`,
+`placeholder`, `synthetic`, `fabricated`, `Sydney`, `AEST`. Every surviving hit
+is one of: a comment recording what was removed; `providerName('fake' → 'dev
+stub')`, which is the honest rendering of the value the assistant itself
+reports; "deterministic" describing pure layout/ordering functions (a
+correctness property); a CSS/HTML `placeholder` attribute; the documented
+project-hue structural placeholder; or a test fixture. No production demo state
+remains. No legitimate test was deleted.
+
+### Verification
+
+- `npx tsc --noEmit` — clean.
+- `npm test` — **123 / 123 pass** (105 pre-existing unchanged, 13 external
+  activity, 5 worker telemetry). Run against real PostgreSQL 17.2.
+- Migrations applied from empty, then seeded, then driven through the browser.
+- Browser at 2048×1600, 1600×900, 1140×860, 390×844: no horizontal overflow at
+  any width, and a clean console except the browser's own network log for the
+  deliberately stopped assistant.
+- Authorization re-verified across the new surfaces as a second real member:
+  scoped graph (5 nodes), scoped worker telemetry (3 runs), no external link,
+  no invisible title in the DOM, and a direct `/api/objects/` probe for the
+  repository project returns 404.
+- Evidence: `app/docs/screenshots/t3.3/` (6 captures).
+
+### Open
+
+- Email stays a preview surface until a mailbox integration is authorized.
+- Workflow-run history will populate the CI row if GitHub Actions is ever
+  configured for this repository; today it truthfully reports zero runs.

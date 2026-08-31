@@ -8,6 +8,8 @@
 //   POST /api/projects/:id/tasks      { title?, body?, sourceObjectId? }  (confirmed)
 //   GET  /api/graph                   context graph read model (P3.2)
 //   GET  /api/objects/:id             one object + its edges (Context Inspector)
+//   GET  /api/external/github         external repository activity (T3.3.1)
+//   GET  /api/system/worker           background execution records (T3.3.4)
 //   POST /ctx/context-set             Context API — assistant-facing (P2.6 §10, §14.1)
 //   static:  /  ->  adapters/web/*
 
@@ -23,6 +25,8 @@ import { createTask } from '../../application/create-task.ts';
 import { viewProject, listProjects } from '../../application/view-project.ts';
 import { buildContextGraph, inspectObject } from '../../application/context-graph.ts';
 import { assembleContextSet } from '../../application/context-set.ts';
+import { readExternalActivity } from '../../application/external-activity.ts';
+import { readWorkerActivity } from '../../application/worker-activity.ts';
 import { DomainError } from '../../domain/errors.ts';
 
 const webDir = join(dirname(fileURLToPath(import.meta.url)), '../web');
@@ -152,11 +156,40 @@ export function createApp(container: Container = buildContainer()) {
         if (!scope) return send(res, 401, { error: 'unknown principal' });
 
         if (method === 'GET' && path === '/api/me') {
+          // The current identity, named by the server from the principal row the
+          // credential actually resolved to (T3.3.2). The client no longer holds
+          // a table of principal labels: a name shown in the header is one the
+          // datastore returned for the authenticated principal, so it cannot be
+          // a stale or invented identity.
+          const members = await container.members.listMembers(scope);
+          const self = members.find((m) => m.id === scope.principalId) ?? null;
           return send(res, 200, {
             principalId: scope.principalId,
             workspaceId: scope.workspaceId,
+            displayName: self?.displayName ?? null,
             sharedProjectIds: scope.sharedProjectIds,
           });
+        }
+
+        // External repository activity. GitHub supplies activity only; it is
+        // never the system of record for a DEVWORKSPACE object, and this route
+        // has no write. It sits behind the same authenticated-scope gate as
+        // every other /api/ read, and the internal anchors it returns are
+        // resolved through the ordinary VisibilityPolicy (T3.3.1).
+        if (method === 'GET' && path === '/api/external/github') {
+          const activity = await readExternalActivity(container, scope);
+          return send(res, 200, activity);
+        }
+
+        // Background execution records. Real outbox-worker outcomes over
+        // objects this scope may see — never a fabricated schedule (T3.3.4).
+        if (method === 'GET' && path === '/api/system/worker') {
+          const worker = await readWorkerActivity(
+            container,
+            scope,
+            config.workerPollIntervalMs,
+          );
+          return send(res, 200, worker);
         }
 
         // Workspace membership. Two columns — id and display name — because
