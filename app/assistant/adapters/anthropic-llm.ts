@@ -17,7 +17,14 @@
 //   • The API key lives only in this process (Zone B). The core holds no such
 //     secret and has no outbound route.
 
-import type { LLMProvider, LlmRequest, LlmResult } from '../ports/llm.ts';
+import type {
+  EffortLevel,
+  LLMProvider,
+  LlmCapabilities,
+  LlmRequest,
+  LlmResult,
+  ModelTier,
+} from '../ports/llm.ts';
 
 const SYSTEM = [
   'You are a retrieval-grounded assistant inside a developer context workspace.',
@@ -45,18 +52,60 @@ const TASK_INSTRUCTION: Record<LlmRequest['task'], string> = {
     'Identify concrete, actionable follow-ups stated or clearly implied in the evidence. Do not invent work nobody mentioned.',
 };
 
+/**
+ * MODEL / EFFORT (T3.3-CORRECTION).
+ *
+ * A Skills card offers four tiers and four effort levels. Both are executed
+ * here, or they are not offered:
+ *
+ *   • A tier maps to a real model id that this adapter puts in the request. If
+ *     the account behind the key cannot use it, the API says so and the run is
+ *     reported as FAILED on the card — never quietly downgraded to another
+ *     model while the card still names the one that was asked for.
+ *   • An effort level maps to a real request parameter — the extended-thinking
+ *     budget, and the output ceiling that has to exceed it. `low` sends no
+ *     thinking block at all. This is a documented mapping, not a decoration:
+ *     changing the level changes what is sent and what the model does.
+ */
+const MODEL_BY_TIER: Readonly<Record<ModelTier, string>> = {
+  haiku: 'claude-haiku-4-5-20251001',
+  sonnet: 'claude-sonnet-5',
+  opus: 'claude-opus-5',
+  fable: 'claude-fable-5',
+};
+
+/** Thinking budget and output ceiling per effort level. */
+const EFFORT_BUDGET: Readonly<Record<EffortLevel, { thinking: number; maxTokens: number }>> = {
+  low: { thinking: 0, maxTokens: 1500 },
+  medium: { thinking: 2048, maxTokens: 6000 },
+  high: { thinking: 6000, maxTokens: 12000 },
+  xhigh: { thinking: 16000, maxTokens: 24000 },
+};
+
 export interface AnthropicOptions {
   apiKey: string;
   model?: string;
   timeoutMs?: number;
+  effort?: EffortLevel;
 }
 
+const TIER_BY_MODEL = new Map<string, ModelTier>(
+  (Object.entries(MODEL_BY_TIER) as Array<[ModelTier, string]>).map(([tier, id]) => [id, tier]),
+);
+
 export function makeAnthropicLLMProvider(opts: AnthropicOptions): LLMProvider {
-  const model = opts.model ?? 'claude-sonnet-5';
+  const model = opts.model ?? MODEL_BY_TIER.sonnet;
   const timeoutMs = opts.timeoutMs ?? 30_000;
+  const defaultEffort: EffortLevel = opts.effort ?? 'medium';
 
   return {
     async complete(request: LlmRequest): Promise<LlmResult> {
+      // The configuration that will actually be sent. A tier the caller named
+      // is resolved here and reported back, so the card's badge and the request
+      // body cannot disagree.
+      const usedModel = request.model ? MODEL_BY_TIER[request.model] : model;
+      const usedEffort: EffortLevel = request.effort ?? defaultEffort;
+      const budget = EFFORT_BUDGET[usedEffort];
       const evidenceBlock = request.evidence
         .map(
           (e) =>
@@ -87,10 +136,14 @@ export function makeAnthropicLLMProvider(opts: AnthropicOptions): LLMProvider {
             'anthropic-version': '2023-06-01',
           },
           body: JSON.stringify({
-            model,
-            max_tokens: 1500,
+            model: usedModel,
+            max_tokens: budget.maxTokens,
             system: SYSTEM,
             messages: [{ role: 'user', content: userMessage }],
+            // Sent only when the level actually asks for it.
+            ...(budget.thinking > 0
+              ? { thinking: { type: 'enabled', budget_tokens: budget.thinking } }
+              : {}),
           }),
         });
       } finally {
@@ -140,11 +193,20 @@ export function makeAnthropicLLMProvider(opts: AnthropicOptions): LLMProvider {
             .filter((t) => t.title.length > 0)
         : [];
 
-      return { answer: obj['answer'], citedRefs, proposedTasks };
+      return { answer: obj['answer'], citedRefs, proposedTasks, usedModel, usedEffort };
     },
 
-    describe() {
-      return { kind: 'anthropic', model };
+    describe(): LlmCapabilities {
+      return {
+        kind: 'anthropic',
+        model,
+        tier: TIER_BY_MODEL.get(model) ?? null,
+        defaultEffort,
+        // Every tier this adapter will genuinely put in a request, and every
+        // effort level it genuinely translates into request parameters.
+        models: ['haiku', 'sonnet', 'opus', 'fable'],
+        efforts: ['low', 'medium', 'high', 'xhigh'],
+      };
     },
   };
 }

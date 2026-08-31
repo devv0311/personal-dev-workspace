@@ -26,12 +26,14 @@ import {
   metaFor,
   revealedLabelGroups,
   labelTextFor,
-  layoutSecondBrain,
-  brainRings,
+  layoutSectorTree,
+  sectorsOf,
+  sectorIndexOf,
+  sectorFocusSet,
   semanticClassOf,
   ringPoints,
-  BRAIN_GEO,
-  CAPABILITIES,
+  SECTOR_GEO,
+  SKILLS,
 } from './graph-model.js';
 
 const NS = 'http://www.w3.org/2000/svg';
@@ -58,12 +60,12 @@ export function createGraphView(opts) {
   // cover a node or a search match.
   const panel = opts.panel ?? svg.ownerDocument.getElementById('gctl');
 
-  // 'brain' is the Second Brain's concentric ring projection of the same
-  // payload; 'wedge' is the P3.1/P3.2 per-project fan. One dataset, two
-  // projections — the node ids, the edges and every downstream surface are
-  // identical (T3.2 §4, §21).
+  // 'sector' is the Second Brain's RADIAL SECTOR TREE over the same payload;
+  // 'wedge' is the P3.1/P3.2 per-project fan. One dataset, two projections —
+  // the node ids, the edges and every downstream surface are identical
+  // (T3.2 §4, §21).
   const layoutMode = opts.layout ?? 'wedge';
-  const onCapability = opts.onCapability ?? (() => {});
+  const onSkill = opts.onSkill ?? (() => {});
 
   const layers = {
     atmosphere: svg.querySelector('#g-atmosphere'),
@@ -85,6 +87,18 @@ export function createGraphView(opts) {
     collapsed: new Set(),
     matches: new Set(),
     transform: { k: 1, tx: 0, ty: 0 },
+    // The sector tree's own state: the sectors currently laid out, and which
+    // sector each node belongs to.
+    sectors: [],
+    sectorOf: new Map(),
+    // SECTOR FOCUS has three independent sources, resolved in this order:
+    // a pointer over a branch, keyboard focus inside one, and the current
+    // selection. Keeping them separate is what lets a hover preview another
+    // branch and then RESTORE the selected one when the pointer leaves,
+    // instead of clearing focus entirely.
+    hoverSector: null,
+    keyboardSector: null,
+    skillState: new Map(),
   };
 
   const nodeEls = new Map(); // id -> { g, disc, label }
@@ -357,143 +371,182 @@ export function createGraphView(opts) {
     }
   }
 
-  /* ------------------------------------------------ SECOND BRAIN structure */
+  /* --------------------------------------------- RADIAL SECTOR TREE ------ */
   //
-  // The ring system (T3.2 §4, §5): circular tracks, radial spokes, a dense
-  // central memory field, a fine outer system boundary and sparse technical
-  // annotations. The tracks and the boundary are STRUCTURE — they say where a
-  // class of object lives — and the annotations state each ring's real name
-  // and its real count, taken from the payload. A ring the workspace has
-  // nothing on is drawn and labelled `0`: the map states its own emptiness
-  // rather than being filled.
+  // The Second Brain's structure (T3.3-CORRECTION §2). The old geometry drew
+  // one concentric ring PER DATA TYPE and annotated each with its name and
+  // count — CAPABILITIES / INBOX / PROJECTS / CONTEXT. That said "there are
+  // four categories of thing"; it did not say what belongs to what, and the
+  // rings are gone rather than renamed.
   //
-  // Rebuilt per render because the ring counts are live; it is a few hundred
-  // inert elements and no pointer target among them.
+  // What is drawn instead is a tree whose geometry IS the hierarchy:
+  //
+  //   • one DIVIDER ray on each sector boundary, so a sector is a visible
+  //     region and not an inference from where nodes happen to sit;
+  //   • a TRUNK from the hub to each project — the parent link, drawn;
+  //   • a BRANCH from each project to each of its own context objects, so a
+  //     spoke is traceable by eye from leaf to hub;
+  //   • a sector LABEL carrying the project's real name and its real context
+  //     count, on the sector's own ray, outside the boundary.
+  //
+  // Every element here is structure or a real label. There is no ring
+  // annotation left that names a category, and nothing is drawn for a sector
+  // the workspace does not actually have.
 
-  function buildBrainStructure(graph) {
+  const SECTOR_LABEL_MAX = 22;
+
+  function buildSectorStructure() {
     const host = layers.atmosphere;
     host.textContent = '';
-    const { CX, CY, R_BOUND, START } = BRAIN_GEO;
-    const rings = brainRings(graph, state.index);
+    const { CX, CY, R_HUB, R_PROJECT, R_BOUND } = SECTOR_GEO;
 
-    // outer system boundary + fine tick ring
+    // outer system boundary + fine tick ring (non-data enclosure)
     el('circle', { class: 'br-bound', cx: CX, cy: CY, r: R_BOUND }, host);
     for (let i = 0; i < 96; i++) {
       const a = (i / 96) * Math.PI * 2;
       const long = i % 8 === 0;
-      const r0 = R_BOUND - 20 - (long ? 8 : 3);
+      const r0 = R_BOUND - 18 - (long ? 8 : 3);
       el('line', {
         class: `br-tick${long ? ' long' : ''}`,
         x1: (CX + Math.cos(a) * r0).toFixed(1),
         y1: (CY + Math.sin(a) * r0).toFixed(1),
-        x2: (CX + Math.cos(a) * (R_BOUND - 20)).toFixed(1),
-        y2: (CY + Math.sin(a) * (R_BOUND - 20)).toFixed(1),
+        x2: (CX + Math.cos(a) * (R_BOUND - 18)).toFixed(1),
+        y2: (CY + Math.sin(a) * (R_BOUND - 18)).toFixed(1),
       }, host);
     }
 
-    // circular tracks, one per ring in the system
-    for (const r of rings) {
-      if (r.key === 'boundary') continue;
-      el('circle', {
-        class: `br-track sem-${r.semantic}`,
-        cx: CX, cy: CY, r: r.radius,
-      }, host);
-    }
+    // the two structural tracks the tree hangs on: the skills ring and the
+    // project ring. They carry no label of their own — the things ON them are
+    // labelled, which is the difference from the ring-per-type model.
+    el('circle', { class: 'br-track sem-action', cx: CX, cy: CY, r: SECTOR_GEO.R_SKILL }, host);
+    el('circle', { class: 'br-track sem-domain', cx: CX, cy: CY, r: R_PROJECT }, host);
 
-    // radial spokes on the project sector boundaries — the structure that makes
-    // "this context belongs to that project" readable without drawing edges.
-    const projects = [...state.index.nodes.values()].filter((n) => n.type === 'project');
-    const n = Math.max(projects.length, 1);
-    for (let i = 0; i < n; i++) {
-      const a = START + i * ((Math.PI * 2) / n);
-      el('line', {
-        class: 'br-spoke',
-        x1: (CX + Math.cos(a) * BRAIN_GEO.R_DOMAIN).toFixed(1),
-        y1: (CY + Math.sin(a) * BRAIN_GEO.R_DOMAIN).toFixed(1),
-        x2: (CX + Math.cos(a) * (R_BOUND - 22)).toFixed(1),
-        y2: (CY + Math.sin(a) * (R_BOUND - 22)).toFixed(1),
-      }, host);
-    }
-    // and a short spoke out to each project, tying it to the core
-    for (const p of projects) {
-      const at = state.pos.get(p.id);
-      if (!at) continue;
-      el('line', {
-        class: 'br-radial',
-        x1: CX, y1: CY, x2: at.x.toFixed(1), y2: at.y.toFixed(1),
-      }, host);
-    }
-
-    // central memory field — mass, not measurement
-    for (const q of particleField(300)) {
+    // central mass — texture, not measurement
+    for (const q of particleField(260)) {
       const c = el('circle', {
         class: `atmo-p ${q.tone}`,
-        cx: (CX + (q.cx - AT.C) * 0.42).toFixed(1),
-        cy: (CY + (q.cy - AT.C) * 0.42).toFixed(1),
+        cx: (CX + (q.cx - AT.C) * 0.3).toFixed(1),
+        cy: (CY + (q.cy - AT.C) * 0.3).toFixed(1),
         r: q.r.toFixed(2),
       }, host);
-      c.setAttribute('opacity', Math.min(0.45, q.o).toFixed(3));
+      c.setAttribute('opacity', Math.min(0.4, q.o).toFixed(3));
     }
 
-    // Sparse technical annotations: each ring's real name and its real count,
-    // stacked up the 12 o'clock gutter that the half-sector offset keeps clear
-    // of projects and of their context.
-    //
-    // The capability ring is the one exception. Its badges sit half a step off
-    // the gutter and carry their own names underneath, so an annotation on
-    // that track would land on one of them. It is stated once, on a single
-    // line, in the clear band between the core and the capability badges.
-    for (const r of rings) {
-      const g = el('g', { class: `br-anno sem-${r.semantic}` }, host);
-      if (r.key === 'capability') {
-        el('text', { class: 'rl', x: CX, y: (CY - 62).toFixed(1), 'text-anchor': 'middle' }, g)
-          .textContent = `${r.label.toUpperCase()} · ${r.count}`;
-        continue;
+    const many = state.sectors.reduce((n, sc) => n + sc.count, 0) > 240;
+
+    for (const sector of state.sectors) {
+      // A group per sector, tagged with its id, so focus is one class flip on
+      // one element rather than a walk over every line in the field.
+      const g = el('g', { class: `br-sector sem-${sector.kind === 'unfiled' ? 'memory' : 'domain'}`, 'data-sector': sector.id }, host);
+
+      // divider on the sector's leading boundary
+      el('line', {
+        class: 'br-divider',
+        x1: (CX + Math.cos(sector.start) * (R_HUB + 8)).toFixed(1),
+        y1: (CY + Math.sin(sector.start) * (R_HUB + 8)).toFixed(1),
+        x2: (CX + Math.cos(sector.start) * (R_BOUND - 20)).toFixed(1),
+        y2: (CY + Math.sin(sector.start) * (R_BOUND - 20)).toFixed(1),
+      }, g);
+
+      const at = sector.nodeId ? state.pos.get(sector.nodeId) : null;
+      // trunk: hub → project. For the unfiled sector there is no project
+      // object, so the trunk runs out along its ray and stops at the context
+      // ring — an absent parent is drawn as an absence, not as a fake node.
+      el('line', {
+        class: 'br-trunk',
+        x1: (CX + Math.cos(sector.angle) * R_HUB).toFixed(1),
+        y1: (CY + Math.sin(sector.angle) * R_HUB).toFixed(1),
+        x2: (at ? at.x : CX + Math.cos(sector.angle) * (SECTOR_GEO.R_CTX - 24)).toFixed(1),
+        y2: (at ? at.y : CY + Math.sin(sector.angle) * (SECTOR_GEO.R_CTX - 24)).toFixed(1),
+      }, g);
+
+      // branches: project → each of its own context objects. Skipped only when
+      // the workspace is large enough that the lines would be a wall rather
+      // than a structure; the sector geometry still states parentage.
+      if (!many) {
+        const from = at ?? {
+          x: CX + Math.cos(sector.angle) * (SECTOR_GEO.R_CTX - 24),
+          y: CY + Math.sin(sector.angle) * (SECTOR_GEO.R_CTX - 24),
+        };
+        for (const id of sector.contextIds) {
+          const to = state.pos.get(id);
+          if (!to) continue;
+          el('line', {
+            class: 'br-branch',
+            x1: from.x.toFixed(1), y1: from.y.toFixed(1),
+            x2: to.x.toFixed(1), y2: to.y.toFixed(1),
+          }, g);
+        }
       }
-      const y = CY - r.radius;
-      el('text', { class: 'rl', x: CX + 10, y: (y - 6).toFixed(1) }, g).textContent =
-        (r.label || '').toUpperCase();
-      if (r.label) {
-        el('text', { class: 'rn', x: CX + 10, y: (y + 8).toFixed(1) }, g).textContent = String(r.count);
-      }
+
+      // The sector's own label: a real project name and a real count, on the
+      // sector's ray just inside the boundary.
+      const lr = R_BOUND - 6;
+      const lx = CX + Math.cos(sector.angle) * lr;
+      const ly = CY + Math.sin(sector.angle) * lr;
+      const anno = el('g', { class: 'br-sector-anno' }, g);
+      const flip = Math.cos(sector.angle) < 0;
+      const deg = (sector.angle * 180) / Math.PI + (flip ? 180 : 0);
+      const t = el('text', {
+        class: 'sl',
+        transform: `translate(${lx.toFixed(1)} ${ly.toFixed(1)}) rotate(${deg.toFixed(1)})`,
+        'text-anchor': flip ? 'start' : 'end',
+        x: flip ? 6 : -6,
+        y: 3,
+      }, anno);
+      t.textContent = `${truncate(sector.title, SECTOR_LABEL_MAX).toUpperCase()} · ${sector.count}`;
     }
   }
 
   /**
-   * The Second Brain's INNER RING: the workspace's real capabilities.
+   * RING 1: the workspace's real, executable SKILLS.
    *
-   * They are drawn in the ring system because that is what the innermost band
-   * means — what this workspace can DO — but they are deliberately NOT graph
-   * nodes: they carry no object id, never enter the index, never appear in
-   * search results and never open the inspector. Activating one runs the real
-   * capability. Nothing about them can be mistaken for a stored object (§23).
+   * They sit on the innermost band because that is what the band means — what
+   * this workspace can DO — but they are deliberately NOT graph nodes: they
+   * carry no object id, never enter the index, never appear in search results
+   * and never open the inspector. Activating one runs the real skill.
+   *
+   * Executability is a state here too (T3.3.5): a skill whose engine is not
+   * reachable is drawn unavailable, is not focusable, and its handler refuses.
    */
-  function buildCapabilityRing() {
+  function buildSkillRing() {
     const host = layers.caps;
     if (!host) return;
     host.textContent = '';
-    if (layoutMode !== 'brain') return;
-    // Half a step off 12 o'clock, so the annotation gutter stays clear here too.
-    const pts = ringPoints(CAPABILITIES.length, BRAIN_GEO.R_CAP, {
-      start: BRAIN_GEO.START + Math.PI / CAPABILITIES.length,
+    if (layoutMode !== 'sector') return;
+    // Half a step off 12 o'clock, so the vertical gutter stays clear.
+    const pts = ringPoints(SKILLS.length, SECTOR_GEO.R_SKILL, {
+      start: SECTOR_GEO.START + Math.PI / SKILLS.length,
     });
     pts.forEach((p, i) => {
-      const cap = CAPABILITIES[i];
+      const skill = SKILLS[i];
+      const st = state.skillState.get(skill.id);
+      const available = st ? st.available !== false : true;
       const g = el('g', {
-        class: 'br-cap',
-        'data-cap': cap.id,
+        class: `br-cap${available ? '' : ' unavailable'}`,
+        'data-skill': skill.id,
         role: 'button',
-        tabindex: '0',
-        'aria-label': `${cap.label} capability — ${cap.description}`,
+        tabindex: available ? '0' : '-1',
+        'aria-disabled': String(!available),
+        'aria-label': available
+          ? `${skill.label} skill — ${skill.description}`
+          : `${skill.label} skill — unavailable: ${st?.reason ?? 'not reachable'}`,
         transform: `translate(${p.x.toFixed(1)} ${p.y.toFixed(1)})`,
       }, host);
       el('circle', { class: 'hit', r: 22, fill: 'transparent' }, g);
       el('circle', { class: 'bg', r: 15 }, g);
       el('circle', { class: 'rim', r: 15, 'vector-effect': 'non-scaling-stroke' }, g);
-      el('text', { class: 'gl', y: 4 }, g).textContent = cap.glyph;
-      const lbl = el('text', { class: 'cl', y: 30 }, g);
-      lbl.textContent = cap.label.toUpperCase();
-      const fire = () => onCapability(cap.id);
+      el('text', { class: 'gl', y: 4 }, g).textContent = skill.glyph;
+      el('text', { class: 'cl', y: 30 }, g).textContent = skill.label.toUpperCase();
+      // The effective configuration, when the runtime has one to report. Never
+      // a badge invented to fill the slot.
+      if (st?.badge) {
+        el('text', { class: 'cfg', y: 41 }, g).textContent = st.badge.toUpperCase();
+      }
+      const fire = () => {
+        if (!available) return;
+        onSkill(skill.id);
+      };
       g.addEventListener('click', (ev) => {
         ev.stopPropagation();
         fire();
@@ -505,6 +558,16 @@ export function createGraphView(opts) {
         }
       });
     });
+  }
+
+  /**
+   * Publish which skills can actually run, and what configuration each will run
+   * with. Called by the shell after it has probed the engines — the ring never
+   * decides availability for itself, and never guesses a badge.
+   */
+  function setSkillState(entries) {
+    state.skillState = new Map(entries.map((e) => [e.id, e]));
+    if (layoutMode === 'sector') buildSkillRing();
   }
 
   /** Project identity hue index (mod the bounded palette), by deterministic
@@ -531,16 +594,29 @@ export function createGraphView(opts) {
     state.graph = graph;
     state.index = buildIndex(graph);
     state.pos =
-      layoutMode === 'brain'
-        ? layoutSecondBrain(graph, state.index)
+      layoutMode === 'sector'
+        ? layoutSectorTree(graph, state.index)
         : layoutGraph(graph, state.index);
+    // The sectors, and the sector each node sits in. Both derive from the same
+    // pure functions the tests exercise, so focus behaves identically here and
+    // under test.
+    state.sectors = layoutMode === 'sector' ? sectorsOf(graph, state.index) : [];
+    state.sectorOf = new Map();
+    for (const [id, at] of state.pos) {
+      if (at.sectorId) state.sectorOf.set(id, at.sectorId);
+    }
+    // Focus that no longer names a real sector is dropped rather than carried
+    // into a graph that does not contain it.
+    for (const key of ['hoverSector', 'keyboardSector']) {
+      if (state[key] && !state.sectors.some((sc) => sc.id === state[key])) state[key] = null;
+    }
     // Collapsed/selected state that no longer refers to a real node is dropped.
     for (const id of [...state.collapsed]) if (!state.index.nodes.has(id)) state.collapsed.delete(id);
     if (state.selectedId && !state.index.nodes.has(state.selectedId)) state.selectedId = null;
 
-    if (layoutMode === 'brain') {
-      buildBrainStructure(graph);
-      buildCapabilityRing();
+    if (layoutMode === 'sector') {
+      buildSectorStructure();
+      buildSkillRing();
     } else {
       buildAtmosphere();
     }
@@ -656,7 +732,7 @@ export function createGraphView(opts) {
     // reference's dominant round volume rather than collapsing to whatever
     // rectangle the current object set happens to occupy.
     const nb = boundsOf(pts, wide ? 30 : 66);
-    const ER = layoutMode === 'brain' ? BRAIN_GEO.R_BOUND : AT.R;
+    const ER = layoutMode === 'sector' ? SECTOR_GEO.R_BOUND : AT.R;
     const encl = { x: AT.C - ER - 4, y: AT.C - ER - 4, w: (ER + 4) * 2, h: (ER + 4) * 2 };
     const minX = Math.min(nb.x, encl.x);
     const minY = Math.min(nb.y, encl.y);
@@ -669,7 +745,7 @@ export function createGraphView(opts) {
     const maxScale = wide ? 2.75 : 1.75;
     // The Second Brain is a place of its own: it gets nearly the whole canvas,
     // where the OS view's field shares its width with two rails.
-    const tight = layoutMode === 'brain';
+    const tight = layoutMode === 'sector';
     const padX = v.w * (tight ? 0.02 : wide ? 0.06 : 0.02);
     const padY = v.h * (tight ? 0.018 : wide ? 0.05 : 0.02);
     const field = { x: v.x + padX, y: v.y + padY, w: v.w - padX * 2, h: v.h - padY * 2 };
@@ -724,6 +800,34 @@ export function createGraphView(opts) {
 
   /* ------------------------------------------------------------ emphasis */
 
+  /* ------------------------------------------------------- sector focus -- */
+  //
+  // SECTOR FOCUS (T3.3-CORRECTION §2.3). Hovering, selecting or keyboard-focusing
+  // anything in a project's branch lights that whole branch — the project, its
+  // context, and whatever either is genuinely related to — and dims every
+  // unrelated branch to 0.15. It is an EMPHASIS, never a filter: no node leaves
+  // the graph, no edge is removed, and clearing focus restores the field
+  // exactly. Nothing outside the map is dimmed.
+
+  /** Which sector a node sits in, or null (the hub sits in none). */
+  const sectorForNode = (id) => (id ? (state.sectorOf.get(id) ?? null) : null);
+
+  /** The branch currently in focus, resolved from the three sources in order. */
+  function currentSector() {
+    return (
+      state.hoverSector ?? state.keyboardSector ?? sectorForNode(state.selectedId) ?? null
+    );
+  }
+
+  /** Set (or clear) focus from one source and repaint. */
+  function setSectorFocus(sectorId, source = 'hover') {
+    const key = source === 'keyboard' ? 'keyboardSector' : 'hoverSector';
+    const next = sectorId && state.sectors.some((sc) => sc.id === sectorId) ? sectorId : null;
+    if (state[key] === next) return;
+    state[key] = next;
+    paint();
+  }
+
   /** Rewrites only class attributes — no layout, no DOM churn. */
   function paint() {
     const visible = visibleNodeIds(state.index, {
@@ -732,6 +836,12 @@ export function createGraphView(opts) {
     });
     const focusId = state.selectedId ?? state.hoverId;
     const near = focusId ? neighborhood(state.index, focusId, 1) : null;
+
+    // The lit set is computed by the same pure function the tests exercise, so
+    // what dims on screen and what the model says dims cannot drift.
+    const sector = currentSector();
+    const lit = sector ? sectorFocusSet(state.index, state.pos, sector) : null;
+    svg.classList.toggle('sector-focus', !!lit);
 
     for (const [id, g] of nodeEls) {
       const cls = ['gnode'];
@@ -742,7 +852,16 @@ export function createGraphView(opts) {
       if (id === state.hoverId) cls.push('hov');
       if (state.matches.has(id)) cls.push('match');
       if (state.collapsed.has(id)) cls.push('collapsed');
+      // Dimming is additive and last: an unrelated branch stays whatever it
+      // already was, at 0.15.
+      if (lit && !lit.has(id)) cls.push('sector-dim');
       setClass(g, cls.join(' '));
+    }
+
+    // The drawn structure of each branch — its divider, trunk, branches and
+    // label — dims with it, so a dimmed sector does not keep a bright skeleton.
+    for (const g of layers.atmosphere?.querySelectorAll('[data-sector]') ?? []) {
+      g.classList.toggle('sector-dim', !!lit && g.dataset.sector !== sector);
     }
 
     // Relationships are a QUERY RESULT, not permanent decoration: at rest the
@@ -761,6 +880,9 @@ export function createGraphView(opts) {
         cls.push('hot');
         if (state.selectedId) revealed.push(e);
       } else if (near) cls.push('mute');
+      // An edge belongs to the focused branch when both its endpoints do —
+      // which is exactly when it is one of "its relevant relationships".
+      if (lit && !(lit.has(e.from) && lit.has(e.to))) cls.push('sector-dim');
       setClass(line, cls.join(' '));
     }
 
@@ -772,6 +894,7 @@ export function createGraphView(opts) {
       total: state.index.nodes.size,
       collapsed: state.collapsed.size,
       selectedId: state.selectedId,
+      sector,
     });
   }
 
@@ -1053,8 +1176,13 @@ export function createGraphView(opts) {
 
     const target = ev.target.closest?.('[data-id]');
     const id = target?.getAttribute('data-id') ?? null;
-    if (id !== state.hoverId) {
+    const sector = sectorForNode(id);
+    if (id !== state.hoverId || sector !== state.hoverSector) {
       state.hoverId = id;
+      // Hovering anywhere in a branch focuses that branch; hovering the hub or
+      // empty space releases the preview and the selection's branch (if any)
+      // comes back.
+      state.hoverSector = sector;
       paint();
     }
     if (id) showTip(id, ev.clientX, ev.clientY);
@@ -1069,11 +1197,26 @@ export function createGraphView(opts) {
   svg.addEventListener('pointerup', endPointer);
   svg.addEventListener('pointercancel', endPointer);
   svg.addEventListener('pointerleave', () => {
-    if (state.hoverId) {
+    if (state.hoverId || state.hoverSector) {
       state.hoverId = null;
+      state.hoverSector = null;
       paint();
     }
     hideTip();
+  });
+
+  // KEYBOARD PARITY. Tabbing to a project or the hub focuses its branch exactly
+  // as hovering does, so the map is navigable without a pointer and focus is
+  // not a mouse-only affordance.
+  svg.addEventListener('focusin', (ev) => {
+    const id = ev.target.closest?.('[data-id]')?.getAttribute('data-id') ?? null;
+    setSectorFocus(sectorForNode(id), 'keyboard');
+  });
+  svg.addEventListener('focusout', (ev) => {
+    // Only release when focus actually left the field, not when it moved
+    // between two nodes inside it.
+    if (svg.contains(ev.relatedTarget)) return;
+    setSectorFocus(null, 'keyboard');
   });
 
   svg.addEventListener(
@@ -1226,6 +1369,8 @@ export function createGraphView(opts) {
     render: renderGraph,
     select,
     focus,
+    setSectorFocus,
+    setSkillState,
     resetView,
     zoomBy,
     setTypeFilter,
@@ -1246,6 +1391,12 @@ export function createGraphView(opts) {
     },
     get collapsedCount() {
       return state.collapsed.size;
+    },
+    get sectors() {
+      return state.sectors;
+    },
+    get focusedSector() {
+      return currentSector();
     },
   };
 }

@@ -1,19 +1,28 @@
-// Deterministic development seed (P2.7 §7, §13; identities revised at T3.3.2).
+// Deterministic development seed (P2.7 §7, §13; identities revised at T3.3.2,
+// headship corrected at T3.3-CORRECTION).
 // Fixed UUIDs so the dev UI and docs can reference stable ids.
 // Idempotent: safe to run repeatedly.
 //
 // T3.3.2 — DEMO IDENTITY REMOVAL.
 // The seed previously created two demo principals, "Alice" and "Bob", and made
 // Alice the owner of everything. They are gone. Every principal this seed
-// creates is a real member of the project group, and the authorization
-// demonstration that Alice/Bob existed for is preserved using those real
-// people instead: the workspace's primary member owns the projects, one project
-// is shared with a second real member, and the rest stay invisible to them.
-// Deny-by-default is demonstrated by real membership, not by invented users.
+// creates is a real member of the project group.
 //
-// What is still NOT recorded about anyone: e-mail, avatar, role, permission
-// tier, external account, contribution count or activity. The schema has no
-// column for them, so the seed writes none and no surface can imply otherwise.
+// T3.3-CORRECTION — HEADSHIP.
+// Dev is the HEAD of DEVWORKSPACE, and that is now a fact in the data rather
+// than a label in the client: Dev's workspace membership carries the `owner`
+// role (the schema permits exactly one per workspace), Dev owns the seeded
+// projects, and Dev is the identity the dev shell opens as. The other group
+// members remain real members with no share except the one demonstrated below —
+// so "member of the workspace" and "can see this project" stay visibly
+// different, and headship is visibly different from both.
+//
+// Nothing here makes the head privileged over anyone's mail: a mail account
+// belongs to the principal who connected it, and no seed connects one.
+//
+// What is still NOT recorded about anyone: e-mail, avatar, permission tier,
+// external account, contribution count or activity. The schema has no column
+// for them, so the seed writes none and no surface can imply otherwise.
 //
 // `Alice` and `Bob` remain in `test/helpers.ts`. That is a two-party
 // authorization FIXTURE inside the test suite, not production state, and
@@ -51,6 +60,22 @@ export const GROUP_MEMBERS: ReadonlyArray<readonly [string, string, string]> = [
   ['00000000-0000-4000-8000-0000000000d5', 'Ananya', 'dev:ananya'],
 ] as const;
 
+/**
+ * Principals a PREVIOUS version of this seed created and this one does not.
+ *
+ * `dev:alice` and `dev:bob` were the T3.3.2 demo principals. They are no longer
+ * created, but a database seeded before that milestone still holds them, and a
+ * stale demo identity in the members list is exactly the production-facing demo
+ * state this correction removes.
+ *
+ * The removal is deliberately NARROW and guarded: only these two known
+ * subjects, only in the seeded workspace, and only when they own nothing and
+ * authored nothing. A principal that owns an object is left alone and reported,
+ * because deleting it would delete real work — and because a real person must
+ * never be removed by a seed on a name match.
+ */
+const RETIRED_SUBJECTS = ['dev:alice', 'dev:bob'] as const;
+
 const memberId = (name: string): string => {
   const row = GROUP_MEMBERS.find((m) => m[1] === name);
   if (!row) throw new Error(`seed: no such workspace member: ${name}`);
@@ -58,18 +83,29 @@ const memberId = (name: string): string => {
 };
 
 /**
- * The workspace's primary principal — the identity the dev shell opens as, and
- * the owner of the seeded projects. A real member of the group, not a stand-in.
+ * The HEAD of the workspace: Dev.
+ *
+ * This is the identity the dev shell opens as, the owner of the seeded
+ * projects, and the principal whose workspace membership carries the `owner`
+ * role. It is one real person, recorded once, and every surface that names the
+ * workspace's head reads it back from that membership row — never from a
+ * constant in the browser.
  */
-export const PRIMARY_PRINCIPAL = memberId('Sanchit');
+export const WORKSPACE_HEAD = memberId('Dev');
 
 /**
- * The second party in the authorization demonstration. Also a real member: they
- * hold a workspace membership and exactly one project share, so the difference
- * between "member of the workspace" and "can see this project" stays visible
- * end to end without a demo identity.
+ * The principal that owns the seeded project objects. The head owns what the
+ * seed creates; objects captured later are owned by whoever captures them.
  */
-export const SHAREE_PRINCIPAL = memberId('Shourya');
+export const PRIMARY_PRINCIPAL = WORKSPACE_HEAD;
+
+/**
+ * The second party in the authorization demonstration. A real member who is NOT
+ * the head: they hold a workspace membership and exactly one project share, so
+ * the difference between "member of the workspace", "can see this project" and
+ * "heads this workspace" stays visible end to end without a demo identity.
+ */
+export const SHAREE_PRINCIPAL = memberId('Sanchit');
 
 /**
  * The external identity of this workspace's own repository (T3.3.1).
@@ -137,23 +173,46 @@ export async function seed(): Promise<void> {
       [SEED.workspaceId],
     );
 
-    // The real project group, and nobody else. Membership only — see
+    // The real project group, and nobody else. Membership plus a role — see
     // GROUP_MEMBERS. No demo principal is created (T3.3.2).
+    //
+    // The role is the headship correction: Dev's membership is `owner`, every
+    // other member's is `member`, and the schema's partial unique index means
+    // the workspace cannot end up with two heads. Re-running the seed
+    // re-asserts the role, so an older database is corrected rather than left
+    // with whatever it happened to have.
     for (const [id, name, subject] of GROUP_MEMBERS) {
       await client.query(
         `INSERT INTO principal (id, workspace_id, auth_subject, display_name)
          VALUES ($1, $2, $3, $4) ON CONFLICT (id) DO NOTHING`,
         [id, SEED.workspaceId, subject, name],
       );
+    }
+    // Demote first, then promote, so the one-owner index can never be violated
+    // mid-seed by two rows briefly claiming the role.
+    for (const [id] of GROUP_MEMBERS) {
       await client.query(
-        `INSERT INTO workspace_membership (workspace_id, principal_id)
-         VALUES ($1, $2) ON CONFLICT DO NOTHING`,
+        `INSERT INTO workspace_membership (workspace_id, principal_id, role)
+         VALUES ($1, $2, 'member')
+         ON CONFLICT (workspace_id, principal_id) DO UPDATE SET role = 'member'`,
         [SEED.workspaceId, id],
       );
     }
+    await client.query(
+      `UPDATE workspace_membership SET role = 'owner'
+        WHERE workspace_id = $1 AND principal_id = $2`,
+      [SEED.workspaceId, WORKSPACE_HEAD],
+    );
 
-    // The primary member owns the projects. Other members hold a workspace
-    // membership but no share, so they must not see them (deny-by-default).
+    // The head owns the seeded projects. Other members hold a workspace
+    // membership but no share, so they must not see them (deny-by-default) —
+    // headship grants ownership of what the head created, not sight of
+    // everything.
+    //
+    // Ownership is RE-ASSERTED on conflict, so a database seeded before this
+    // correction converges instead of keeping the previous owner. `created_by`
+    // is deliberately NOT rewritten: authorship is immutable (R8), and who
+    // originally wrote a row stays true even when ownership moves.
     for (const [id, title] of [
       [SEED.projectApi, 'API Gateway Rework'],
       [SEED.projectPrivate, 'Personal Scratch'],
@@ -162,7 +221,7 @@ export async function seed(): Promise<void> {
       await client.query(
         `INSERT INTO object (id, workspace_id, type, title, body, owner_id, created_by)
          VALUES ($1, $2, 'project', $3, '', $4, $4)
-         ON CONFLICT (id) DO NOTHING`,
+         ON CONFLICT (id) DO UPDATE SET owner_id = EXCLUDED.owner_id`,
         [id, SEED.workspaceId, title, PRIMARY_PRINCIPAL],
       );
     }
@@ -196,7 +255,7 @@ export async function seed(): Promise<void> {
       await client.query(
         `INSERT INTO object (id, workspace_id, type, title, body, home_project_id, owner_id, created_by)
          VALUES ($1, $2, 'note', $3, $4, $5, $6, $6)
-         ON CONFLICT (id) DO NOTHING`,
+         ON CONFLICT (id) DO UPDATE SET owner_id = EXCLUDED.owner_id`,
         [id, SEED.workspaceId, title, body, projectId, PRIMARY_PRINCIPAL],
       );
     }
@@ -246,7 +305,51 @@ export async function seed(): Promise<void> {
       );
     }
 
+    // Retire the superseded demo principals, where it is safe to.
+    //
+    // The guard covers EVERY table that references a principal, not just
+    // ownership: a demo identity that authored an edge, recorded activity, was
+    // granted a share or connected a mailbox is history in that database, and
+    // deleting it would either destroy that history or fail on a restricting
+    // foreign key. Such a row is kept and reported instead. A database seeded
+    // from empty has no references, so the retired identities simply never
+    // exist there.
+    const retired: string[] = [];
+    const kept: string[] = [];
+    for (const subject of RETIRED_SUBJECTS) {
+      const { rows } = await client.query<{ display_name: string }>(
+        `DELETE FROM principal p
+          WHERE p.workspace_id = $1 AND p.auth_subject = $2
+            AND NOT EXISTS (SELECT 1 FROM object o WHERE o.owner_id = p.id OR o.created_by = p.id)
+            AND NOT EXISTS (SELECT 1 FROM relationship r WHERE r.author_id = p.id)
+            AND NOT EXISTS (SELECT 1 FROM activity a WHERE a.actor_id = p.id)
+            AND NOT EXISTS (SELECT 1 FROM audit_event e WHERE e.actor_id = p.id)
+            AND NOT EXISTS (SELECT 1 FROM project_share s
+                             WHERE s.principal_id = p.id OR s.granted_by = p.id)
+            AND NOT EXISTS (SELECT 1 FROM mail_account m WHERE m.principal_id = p.id)
+          RETURNING p.display_name`,
+        [SEED.workspaceId, subject],
+      );
+      if (rows[0]) {
+        retired.push(rows[0].display_name);
+        continue;
+      }
+      const { rows: still } = await client.query<{ display_name: string }>(
+        `SELECT display_name FROM principal WHERE workspace_id = $1 AND auth_subject = $2`,
+        [SEED.workspaceId, subject],
+      );
+      if (still[0]) kept.push(still[0].display_name);
+    }
+
     await client.query('COMMIT');
+    if (retired.length) {
+      console.log(`Retired superseded demo principals: ${retired.join(', ')}`);
+    }
+    if (kept.length) {
+      console.log(
+        `Kept (they hold real rows in this database, which a seed must not destroy): ${kept.join(', ')}`,
+      );
+    }
   } catch (err) {
     await client.query('ROLLBACK');
     throw err;
@@ -259,8 +362,8 @@ export async function seed(): Promise<void> {
     `Seeded ${config.databaseUrl}\n` +
       `  workspace : ${SEED.workspaceId}\n` +
       `  members   : ${GROUP_MEMBERS.map((m) => m[1]).join(', ')}\n` +
-      `  primary   : ${nameOf(PRIMARY_PRINCIPAL)} ${PRIMARY_PRINCIPAL}\n` +
-      `              (owns the projects — use as: Authorization: Dev ${PRIMARY_PRINCIPAL})\n` +
+      `  head      : ${nameOf(WORKSPACE_HEAD)} ${WORKSPACE_HEAD}\n` +
+      `              (workspace owner — use as: Authorization: Dev ${WORKSPACE_HEAD})\n` +
       `  sharee    : ${nameOf(SHAREE_PRINCIPAL)} ${SHAREE_PRINCIPAL}\n` +
       `              (member; sees ONLY the shared project)\n` +
       `  projects  : ${SEED.projectApi}  "API Gateway Rework"\n` +

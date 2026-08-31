@@ -1,23 +1,32 @@
-// T3.2 — the OS command centre: RING + CORE.
+// T3.2 / T3.3-CORRECTION — the OS command centre: CORE + ARTIFACT ORBIT.
 //
-// This is the resting state's central visual field. It is deliberately NOT the
-// context graph: the graph is the Second Brain, one core-click away. What is
-// drawn here is
+// WHAT CHANGED, AND WHY.
 //
-//   • a CORE carrying the workspace's identity and its real size, and
-//   • one RING of the workspace's real, invocable capabilities,
+// This perimeter used to carry six static capability circles — CAPTURE,
+// SEARCH, CONNECT, ASK, EXTRACT TASKS, SUMMARIZE. They were duplicates of the
+// Skills Deck, they were not data, and a command centre whose centre shows you
+// six buttons you already have is showing you nothing about your workspace.
+// They are REMOVED: not hidden, not disabled, not retained as invisible
+// semantic nodes. Nothing in this file knows what a capability is any more.
 //
-// inside a dense but restrained non-data atmosphere — a faceted wireframe
-// enclosure, concentric orbital guides, a fine tick ring, an outer boundary and
-// a particle mass. Every element in that atmosphere is texture: it carries no
-// id, no count, no label and no pointer target, so visual density can be high
-// without a single pixel of it claiming to be data (T3.2 §1, §23).
+// The orbit now carries ARTIFACTS — real outputs this system produced:
+// delivered background routines, CI runs, pull requests, issues, and objects a
+// user kept from an assistant proposal. Every node has a stable id, a real
+// title, a real category, a real instant and a real source, and every one of
+// them came from /api/artifacts, which assembles them from records that already
+// existed. If nothing has been produced, the orbit is empty and says so — the
+// track, the enclosure and the atmosphere stay exactly as they are.
 //
-// Motion budget (§16): nothing here animates at rest. Orbital rotation is off.
-// The only movement is a state transition — hover, focus, entering the Second
-// Brain — and each is disabled under prefers-reduced-motion by the stylesheet.
-
-import { CAPABILITIES, ringPoints } from './graph-model.js';
+// The centre is still the workspace CORE: the product's identity, and its real
+// size, from the same graph payload the rails read.
+//
+// The distinction the whole composition depends on: a PARTICLE is texture —
+// no id, no title, no timestamp, no handler — and an ARTIFACT is data. Nothing
+// here blurs the two.
+//
+// Motion budget (§16): nothing animates at rest. The only movement is a state
+// transition — hover, focus, entering the Second Brain — and each is disabled
+// under prefers-reduced-motion by the stylesheet.
 
 const NS = 'http://www.w3.org/2000/svg';
 
@@ -25,14 +34,19 @@ const GEO = {
   C: 500,
   R_BOUND: 496, // outer system boundary (dashed)
   R_TICK: 478, // fine tick ring
-  R_RING: 418, // capability badge track
-  R_BADGE: 38,
-  R_LABEL: 336, // capability labels, on their own track inside the badges
+  R_ORBIT: 418, // artifact track
+  R_NODE: 21,
+  R_LABEL: 352, // artifact labels, on their own track inside the orbit
   R_SHELL: 306, // faceted wireframe enclosure
   GUIDES: [152, 238, 306],
   R_CORE: 122, // core hexagon
   START: -Math.PI / 2,
+  /** How many decorative markers ride the orbit. Texture, not a slot count. */
+  DECO: 24,
 };
+
+/** The most artifacts the orbit will place. A view bound; the server caps too. */
+const MAX_ORBIT = 14;
 
 function el(name, attrs, parent) {
   const n = document.createElementNS(NS, name);
@@ -41,7 +55,7 @@ function el(name, attrs, parent) {
   return n;
 }
 
-/** Regular polygon path, used for the core hexagon and the badge markers. */
+/** Regular polygon path, used for the core hexagon. */
 function polygon(cx, cy, r, sides, rot = 0) {
   const pts = [];
   for (let i = 0; i < sides; i++) {
@@ -112,14 +126,26 @@ function particles(n, R) {
   return out;
 }
 
+const truncate = (v, n) => {
+  const s = String(v ?? '');
+  return s.length > n ? `${s.slice(0, n - 1)}…` : s;
+};
+
 /**
  * @param {object} opts
- * @param {SVGSVGElement} opts.svg     host, viewBox 0 0 1000 1000
- * @param {(id:string)=>void} opts.onAction  a capability badge was invoked
+ * @param {SVGSVGElement} opts.svg          host, viewBox 0 0 1000 1000
+ * @param {(a:object)=>void} opts.onArtifact an artifact node was activated
  * @param {()=>void} opts.onCore             the core was activated
  * @param {HTMLElement} [opts.tip]           shared hover readout
+ * @param {(iso:string)=>string} [opts.formatTime] wall-clock formatter (IST)
  */
-export function createCommandRing({ svg, onAction = () => {}, onCore = () => {}, tip = null }) {
+export function createCommandRing({
+  svg,
+  onArtifact = () => {},
+  onCore = () => {},
+  tip = null,
+  formatTime = (iso) => String(iso ?? ''),
+}) {
   const layers = {
     atmo: svg.querySelector('#cr-atmo'),
     deco: svg.querySelector('#cr-deco'),
@@ -127,6 +153,7 @@ export function createCommandRing({ svg, onAction = () => {}, onCore = () => {},
     core: svg.querySelector('#cr-core'),
   };
   let built = false;
+  let artifacts = [];
 
   /* ---------------------------------------------------- non-data atmosphere */
   function buildAtmosphere() {
@@ -183,28 +210,29 @@ export function createCommandRing({ svg, onAction = () => {}, onCore = () => {},
   }
 
   /**
-   * Decorative ring geometry BETWEEN the capability badges. Hollow markers and
-   * hairlines only: no glyph, no label, no count, no handler — density without
-   * a single fabricated artefact (§1).
+   * The orbit TRACK and its decorative markers — hollow rings and hairlines at a
+   * fixed cadence around the band. No glyph, no label, no count, no handler:
+   * density without a single fabricated artefact (§1). The cadence is a
+   * constant, deliberately unrelated to how many artifacts exist, so the ring
+   * never implies a number of slots waiting to be filled.
    */
   function buildDecoration() {
     const host = layers.deco;
     host.textContent = '';
-    const n = CAPABILITIES.length;
-    const step = (Math.PI * 2) / n;
-    for (let i = 0; i < n; i++) {
-      for (const f of [0.25, 0.5, 0.75]) {
-        const a = GEO.START + (i + f) * step;
-        const x = GEO.C + Math.cos(a) * GEO.R_RING;
-        const y = GEO.C + Math.sin(a) * GEO.R_RING;
-        el('circle', {
-          class: 'cr-marker',
-          cx: x.toFixed(1), cy: y.toFixed(1), r: f === 0.5 ? 9 : 5.5,
-        }, host);
+    el('circle', { class: 'cr-orbit', cx: GEO.C, cy: GEO.C, r: GEO.R_ORBIT }, host);
+    for (let i = 0; i < GEO.DECO; i++) {
+      const a = GEO.START + (i / GEO.DECO) * Math.PI * 2;
+      const x = GEO.C + Math.cos(a) * GEO.R_ORBIT;
+      const y = GEO.C + Math.sin(a) * GEO.R_ORBIT;
+      el('circle', {
+        class: 'cr-marker',
+        cx: x.toFixed(1), cy: y.toFixed(1), r: i % 4 === 0 ? 6 : 3.5,
+      }, host);
+      if (i % 4 === 0) {
         el('line', {
           class: 'cr-hair',
-          x1: (GEO.C + Math.cos(a) * (GEO.R_RING + 16)).toFixed(1),
-          y1: (GEO.C + Math.sin(a) * (GEO.R_RING + 16)).toFixed(1),
+          x1: (GEO.C + Math.cos(a) * (GEO.R_ORBIT + 14)).toFixed(1),
+          y1: (GEO.C + Math.sin(a) * (GEO.R_ORBIT + 14)).toFixed(1),
           x2: (GEO.C + Math.cos(a) * (GEO.R_TICK - 10)).toFixed(1),
           y2: (GEO.C + Math.sin(a) * (GEO.R_TICK - 10)).toFixed(1),
         }, host);
@@ -212,45 +240,74 @@ export function createCommandRing({ svg, onAction = () => {}, onCore = () => {},
     }
   }
 
-  /* --------------------------------------------------- the capability ring */
-  function buildRing() {
+  /* ------------------------------------------------------ the artifact orbit */
+
+  /**
+   * Place the real artifacts.
+   *
+   * Nothing is placed that did not come from the feed, and no slot is filled to
+   * make the ring look complete: with three artifacts, three nodes are drawn.
+   * The empty case draws one quiet line ON the track saying so — an absence
+   * stated, not an absence disguised.
+   */
+  function buildOrbit() {
     const host = layers.ring;
     host.textContent = '';
-    const points = ringPoints(CAPABILITIES.length, GEO.R_RING, { start: GEO.START });
 
-    points.forEach((p, i) => {
-      const cap = CAPABILITIES[i];
+    if (artifacts.length === 0) {
+      const t = el('text', {
+        class: 'cr-orbit-empty',
+        x: GEO.C,
+        y: (GEO.C - GEO.R_ORBIT).toFixed(1),
+        'text-anchor': 'middle',
+      }, host);
+      t.textContent = 'NO ARTIFACTS PRODUCED YET';
+      return;
+    }
+
+    const items = artifacts.slice(0, MAX_ORBIT);
+    const step = (Math.PI * 2) / items.length;
+    items.forEach((a, i) => {
+      const angle = GEO.START + i * step;
+      const x = GEO.C + Math.cos(angle) * GEO.R_ORBIT;
+      const y = GEO.C + Math.sin(angle) * GEO.R_ORBIT;
+
       const g = el('g', {
-        class: 'cr-badge',
-        'data-cap': cap.id,
+        // The category is an attribute, so the restrained glow is a stylesheet
+        // concern and the class is never the only place the class is stated —
+        // the tooltip and the modal both name it in words.
+        class: `cr-artifact${a.unread ? ' unread' : ''}`,
+        'data-artifact': a.id,
+        'data-category': a.category,
         role: 'button',
         tabindex: '0',
-        'aria-label': `${cap.label} — ${cap.description}`,
-        transform: `translate(${p.x.toFixed(1)} ${p.y.toFixed(1)})`,
+        'aria-label': `${a.categoryLabel}: ${a.title}. ${formatTime(a.createdAt)}.${a.unread ? ' Unread.' : ''}`,
+        transform: `translate(${x.toFixed(1)} ${y.toFixed(1)})`,
       }, host);
 
-      el('circle', { class: 'hit', r: GEO.R_BADGE + 8, fill: 'transparent' }, g);
-      el('circle', { class: 'bg', r: GEO.R_BADGE }, g);
-      el('circle', { class: 'rim', r: GEO.R_BADGE }, g);
-      el('polygon', { class: 'hex', points: polygon(0, 0, GEO.R_BADGE - 9, 6, Math.PI / 6) }, g);
-      const glyph = el('text', { class: 'gl', y: 6 }, g);
-      glyph.textContent = cap.glyph;
+      el('circle', { class: 'hit', r: GEO.R_NODE + 12, fill: 'transparent' }, g);
+      el('circle', { class: 'glow', r: GEO.R_NODE + 9 }, g);
+      el('circle', { class: 'bg', r: GEO.R_NODE }, g);
+      el('circle', { class: 'rim', r: GEO.R_NODE }, g);
+      // An unread artifact carries a filled centre; a read one does not. The
+      // state is also in the aria-label and in the tooltip, so it never rests
+      // on the mark alone.
+      if (a.unread) el('circle', { class: 'seen', r: 5 }, g);
 
-      // The label sits on its own track inside the badge ring, so the ring
-      // reads as one band of names rather than a scatter of icons.
-      const la = p.angle;
-      const lx = GEO.C + Math.cos(la) * GEO.R_LABEL - p.x;
-      const ly = GEO.C + Math.sin(la) * GEO.R_LABEL - p.y;
-      const label = el('text', { class: 'cap-label', x: lx.toFixed(1), y: ly.toFixed(1) }, g);
-      label.textContent = cap.label.toUpperCase();
-      const cmd = el('text', {
-        class: 'cap-cmd',
+      // The label track sits inside the orbit so the ring reads as one band of
+      // names rather than a scatter of dots.
+      const lx = GEO.C + Math.cos(angle) * GEO.R_LABEL - x;
+      const ly = GEO.C + Math.sin(angle) * GEO.R_LABEL - y;
+      const label = el('text', { class: 'af-label', x: lx.toFixed(1), y: ly.toFixed(1) }, g);
+      label.textContent = truncate(a.title, 22).toUpperCase();
+      const kind = el('text', {
+        class: 'af-kind',
         x: lx.toFixed(1),
-        y: (ly + 15).toFixed(1),
+        y: (ly + 14).toFixed(1),
       }, g);
-      cmd.textContent = cap.command.startsWith('/') ? cap.command : '';
+      kind.textContent = a.categoryLabel.toUpperCase();
 
-      const fire = () => onAction(cap.id);
+      const fire = () => onArtifact(a);
       g.addEventListener('click', fire);
       g.addEventListener('keydown', (ev) => {
         if (ev.key === 'Enter' || ev.key === ' ') {
@@ -259,28 +316,36 @@ export function createCommandRing({ svg, onAction = () => {}, onCore = () => {},
         }
       });
       if (tip) {
-        g.addEventListener('pointerenter', (ev) => showTip(cap, ev));
-        g.addEventListener('pointermove', (ev) => showTip(cap, ev));
+        g.addEventListener('pointerenter', (ev) => showTip(a, ev));
+        g.addEventListener('pointermove', (ev) => showTip(a, ev));
         g.addEventListener('pointerleave', hideTip);
       }
     });
   }
 
-  function showTip(cap, ev) {
+  /**
+   * Hover readout. It always carries the TIMESTAMP, because "when was this
+   * produced" is the question an orbit of outputs exists to answer, and it
+   * names the source so a node is traceable before it is opened.
+   */
+  function showTip(a, ev) {
     if (!tip) return;
     tip.textContent = '';
     const k = document.createElement('span');
     k.className = 'tk';
-    k.textContent = 'Capability';
+    k.textContent = a.categoryLabel;
     const s = document.createElement('strong');
-    s.textContent = cap.label;
+    s.textContent = a.title;
     const m = document.createElement('span');
     m.className = 'tm';
-    m.textContent = cap.command;
-    const d = document.createElement('span');
-    d.className = 'ts';
-    d.textContent = cap.description;
-    tip.append(k, s, m, d);
+    m.textContent = `${formatTime(a.createdAt)} · ${a.source}`;
+    tip.append(k, s, m);
+    if (a.state) {
+      const st = document.createElement('span');
+      st.className = 'ts';
+      st.textContent = `${a.state}${a.unread ? ' · unread' : ''}`;
+      tip.append(st);
+    }
     tip.hidden = false;
     const host = svg.parentElement.getBoundingClientRect();
     const w = tip.offsetWidth;
@@ -296,7 +361,6 @@ export function createCommandRing({ svg, onAction = () => {}, onCore = () => {},
   };
 
   /* ------------------------------------------------------------- the core */
-  let coreTitle = null;
   let coreCount = null;
 
   function buildCore() {
@@ -322,8 +386,7 @@ export function createCommandRing({ svg, onAction = () => {}, onCore = () => {},
     el('circle', { class: 'f', cx: -9, cy: 9, r: 4.2 }, mark);
     el('circle', { class: 'o', cx: 9, cy: -9, r: 4.2 }, mark);
 
-    coreTitle = el('text', { class: 'core-name', y: 22 }, g);
-    coreTitle.textContent = 'DEVWORKSPACE';
+    el('text', { class: 'core-name', y: 22 }, g).textContent = 'DEVWORKSPACE';
     coreCount = el('text', { class: 'core-count', y: 42 }, g);
     coreCount.textContent = '—';
 
@@ -346,19 +409,21 @@ export function createCommandRing({ svg, onAction = () => {}, onCore = () => {},
     rule.setAttribute('aria-hidden', 'true');
   }
 
+  function ensureBuilt() {
+    if (built) return;
+    built = true;
+    buildAtmosphere();
+    buildDecoration();
+    buildCore();
+  }
+
   /**
    * The core states the workspace's real size. Both numbers come from the
    * graph payload's own stats — the same numbers the rails and the inspector
    * report — so the centre can never disagree with the panels around it.
    */
   function render(graph) {
-    if (!built) {
-      built = true;
-      buildAtmosphere();
-      buildDecoration();
-      buildRing();
-      buildCore();
-    }
+    ensureBuilt();
     const objects = Math.max(0, (graph?.nodes?.length ?? 0) - 1);
     const projects = graph?.stats?.projects ?? 0;
     if (coreCount) {
@@ -366,21 +431,45 @@ export function createCommandRing({ svg, onAction = () => {}, onCore = () => {},
     }
   }
 
-  /** Light the capabilities whose name or command matches — search attenuates
-   *  the ring in place rather than replacing it with a list (§19). */
+  /** Place a new artifact feed. Each item must already carry its real fields. */
+  function renderArtifacts(items) {
+    ensureBuilt();
+    artifacts = Array.isArray(items) ? items : [];
+    buildOrbit();
+  }
+
+  /** Mark one artifact read in place, without refetching the whole orbit. */
+  function markRead(id) {
+    artifacts = artifacts.map((a) => (a.id === id ? { ...a, unread: false } : a));
+    const g = layers.ring.querySelector(`[data-artifact="${CSS.escape(id)}"]`);
+    if (g) {
+      g.classList.remove('unread');
+      g.querySelector('.seen')?.remove();
+    }
+  }
+
+  /** Light the artifacts whose title, category or source matches — search
+   *  attenuates the ring in place rather than replacing it with a list (§19). */
   function setMatches(query) {
     const q = String(query ?? '').trim().toLowerCase();
     svg.classList.toggle('searching', q.length > 0);
-    for (const g of layers.ring.querySelectorAll('.cr-badge')) {
-      const cap = CAPABILITIES.find((c) => c.id === g.dataset.cap);
+    for (const g of layers.ring.querySelectorAll('.cr-artifact')) {
+      const a = artifacts.find((x) => x.id === g.dataset.artifact);
       const hit =
         q.length > 0 &&
-        (cap.label.toLowerCase().includes(q) ||
-          cap.command.toLowerCase().includes(q) ||
-          cap.description.toLowerCase().includes(q));
+        !!a &&
+        (a.title.toLowerCase().includes(q) ||
+          a.categoryLabel.toLowerCase().includes(q) ||
+          String(a.source).toLowerCase().includes(q));
       g.classList.toggle('match', hit);
     }
   }
 
-  return { render, setMatches, focusCore: () => layers.core.querySelector('.cr-core')?.focus() };
+  return {
+    render,
+    renderArtifacts,
+    markRead,
+    setMatches,
+    focusCore: () => layers.core.querySelector('.cr-core')?.focus(),
+  };
 }

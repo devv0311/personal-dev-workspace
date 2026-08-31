@@ -10,6 +10,15 @@
 //   GET  /api/objects/:id             one object + its edges (Context Inspector)
 //   GET  /api/external/github         external repository activity (T3.3.1)
 //   GET  /api/system/worker           background execution records (T3.3.4)
+//   GET  /api/artifacts               produced outputs — the command orbit
+//   POST /api/artifacts/read          { ref }  per-principal read state
+//   GET  /api/inbound                 Attention Stack — multi-source queue
+//   GET  /api/mail/accounts           the CALLER's own mail accounts
+//   POST /api/mail/accounts           { provider, accountId? } → consent URL
+//   PATCH  /api/mail/accounts/:id     { feedsInbound }
+//   DELETE /api/mail/accounts/:id     disconnect
+//   GET  /oauth/mail/callback         provider redirect (carries no credential
+//                                     of ours — bound by a single-use state)
 //   POST /ctx/context-set             Context API — assistant-facing (P2.6 §10, §14.1)
 //   static:  /  ->  adapters/web/*
 
@@ -27,6 +36,15 @@ import { buildContextGraph, inspectObject } from '../../application/context-grap
 import { assembleContextSet } from '../../application/context-set.ts';
 import { readExternalActivity } from '../../application/external-activity.ts';
 import { readWorkerActivity } from '../../application/worker-activity.ts';
+import { markArtifactRead, readArtifactFeed } from '../../application/artifacts.ts';
+import { readInboundQueue } from '../../application/inbound-queue.ts';
+import {
+  beginMailConnect,
+  completeMailConnect,
+  disconnectMailAccount,
+  listMailAccounts,
+  setMailAccountFeeds,
+} from '../../application/mail-accounts.ts';
 import { DomainError } from '../../domain/errors.ts';
 
 const webDir = join(dirname(fileURLToPath(import.meta.url)), '../web');
@@ -62,6 +80,45 @@ async function readJson(req: IncomingMessage): Promise<Record<string, unknown>> 
   } catch {
     throw new DomainError('validation', 'Invalid JSON body.');
   }
+}
+
+/** Escape before interpolating anything into the callback page. */
+const escapeHtml = (s: string): string =>
+  s.replace(/[&<>"']/g, (c) =>
+    c === '&' ? '&amp;' : c === '<' ? '&lt;' : c === '>' ? '&gt;' : c === '"' ? '&quot;' : '&#39;',
+  );
+
+/**
+ * The one HTML page this server renders itself: the mail provider's redirect
+ * target. It states the outcome and nothing else — no token, no code, no state
+ * — and closes itself when it was opened as a consent window.
+ */
+function sendCallbackPage(
+  res: ServerResponse,
+  status: number,
+  message: string,
+  ok = false,
+): void {
+  const body = `<!doctype html><html lang="en"><head><meta charset="utf-8" />
+<title>DEVWORKSPACE — mail</title>
+<style>
+ body{margin:0;background:#000;color:#ececee;font:400 13px/1.5 system-ui,-apple-system,sans-serif;
+      display:grid;place-content:center;height:100vh;text-align:center;gap:10px}
+ .k{font:600 9px/1 system-ui;letter-spacing:.18em;text-transform:uppercase;color:${ok ? '#55d6a0' : '#ff5c78'}}
+ .m{color:#9aa0a7;max-width:38ch}
+ a{color:#ff7a1a}
+</style></head><body>
+<div class="k">${ok ? 'Mail account connected' : 'Not connected'}</div>
+<div class="m">${escapeHtml(message)}</div>
+<a href="/">Return to DEVWORKSPACE</a>
+<script>
+  // Opened as a consent window: tell the opener to re-read its own accounts,
+  // then close. No credential is passed — the opener asks the server.
+  try { if (window.opener) { window.opener.postMessage({ type: 'devworkspace:mail', ok: ${ok} }, window.location.origin); setTimeout(function(){ window.close(); }, 900); } } catch (e) {}
+</script>
+</body></html>`;
+  res.writeHead(status, { 'content-type': 'text/html; charset=utf-8', 'cache-control': 'no-store' });
+  res.end(body);
 }
 
 async function serveStatic(res: ServerResponse, urlPath: string): Promise<void> {
@@ -148,6 +205,40 @@ export function createApp(container: Container = buildContainer()) {
         return send(res, result.ok ? 200 : 409, result);
       }
 
+      // ---------------------------------------------------------------------
+      // MAIL OAUTH CALLBACK (T3.3-CORRECTION).
+      //
+      // This route sits OUTSIDE /api/ deliberately. It is a top-level browser
+      // navigation initiated by the mail provider, so it cannot carry the
+      // application's own credential; requiring one here would make the flow
+      // impossible rather than making it safer.
+      //
+      // What authorises it instead is the single-use `state` this server minted
+      // and stored against the principal who started the flow. The row is
+      // deleted as it is read and it carries an expiry, so an unknown, expired
+      // or replayed state completes nothing. The authorization code is
+      // exchanged server-side; no token ever reaches this response.
+      if (method === 'GET' && path === '/oauth/mail/callback') {
+        const state = url.searchParams.get('state') ?? '';
+        const code = url.searchParams.get('code') ?? '';
+        const providerError = url.searchParams.get('error');
+        if (providerError) {
+          // The provider's own refusal, reported as a refusal.
+          return sendCallbackPage(res, 400, `The provider refused: ${providerError}`);
+        }
+        if (!state || !code) {
+          return sendCallbackPage(res, 400, 'That mail authorization is incomplete.');
+        }
+        try {
+          const { account } = await completeMailConnect(container, { state, code });
+          return sendCallbackPage(res, 200, `Connected ${account.address}.`, true);
+        } catch (err) {
+          const message =
+            err instanceof DomainError ? err.message : 'The mail account could not be connected.';
+          return sendCallbackPage(res, 400, message);
+        }
+      }
+
       if (path.startsWith('/api/')) {
         // --- AUTHORIZATION: resolve principal, then the per-request scope, once.
         const principalId = principalFromRequest(req);
@@ -161,12 +252,26 @@ export function createApp(container: Container = buildContainer()) {
           // a table of principal labels: a name shown in the header is one the
           // datastore returned for the authenticated principal, so it cannot be
           // a stale or invented identity.
+          //
+          // T3.3-CORRECTION: two DIFFERENT identities are reported, because the
+          // UI must be able to state both without conflating them —
+          //   `self`      the person whose credential this is, whoever they are;
+          //   `workspace.head`  the member whose membership carries the `owner`
+          //                     role, read back from that row.
+          // Neither is hardcoded, and a workspace with no head reports null
+          // rather than a guess.
           const members = await container.members.listMembers(scope);
           const self = members.find((m) => m.id === scope.principalId) ?? null;
+          const workspace = await container.members.readWorkspace(scope);
           return send(res, 200, {
             principalId: scope.principalId,
             workspaceId: scope.workspaceId,
             displayName: self?.displayName ?? null,
+            role: self?.role ?? null,
+            isWorkspaceHead: self?.role === 'owner',
+            workspace: workspace
+              ? { id: workspace.id, name: workspace.name, head: workspace.head }
+              : null,
             sharedProjectIds: scope.sharedProjectIds,
           });
         }
@@ -192,12 +297,93 @@ export function createApp(container: Container = buildContainer()) {
           return send(res, 200, worker);
         }
 
-        // Workspace membership. Two columns — id and display name — because
-        // that is all the model records about a person (T3.2 §13). No e-mail,
-        // avatar, role, external account or activity exists to return.
+        // Workspace membership. Three columns — id, display name and the
+        // membership role — because that is all the model records about a
+        // person (T3.2 §13; role added at T3.3-CORRECTION). No e-mail, avatar,
+        // permission tier, external account or activity exists to return.
         if (method === 'GET' && path === '/api/workspace/members') {
           const members = await container.members.listMembers(scope);
-          return send(res, 200, { members });
+          const workspace = await container.members.readWorkspace(scope);
+          return send(res, 200, { members, workspace });
+        }
+
+        // Produced outputs — the command centre's artifact orbit. The worker
+        // telemetry is read once and shared with the feed, so the orbit and the
+        // Routines rail can never describe the same run differently.
+        if (method === 'GET' && path === '/api/artifacts') {
+          const worker = await readWorkerActivity(
+            container,
+            scope,
+            config.workerPollIntervalMs,
+          );
+          const feed = await readArtifactFeed(container, scope, worker);
+          return send(res, 200, feed);
+        }
+
+        // Per-principal read state. Marking an artifact read affects this
+        // principal's rows only — there is no unscoped write behind it.
+        if (method === 'POST' && path === '/api/artifacts/read') {
+          const body = await readJson(req);
+          const ref = body['ref'];
+          if (typeof ref !== 'string' || !ref) {
+            throw new DomainError('validation', 'An artifact reference is required.');
+          }
+          await markArtifactRead(container, scope, ref);
+          return send(res, 200, { ok: true, ref });
+        }
+
+        // The Attention Stack. Many sources, each stating its own condition;
+        // mail items come only from accounts THIS principal connected.
+        if (method === 'GET' && path === '/api/inbound') {
+          const queue = await readInboundQueue(container, scope);
+          return send(res, 200, queue);
+        }
+
+        // ---------------------------------------------------------------
+        // MAIL ACCOUNTS. Every route below is scoped to the caller's own
+        // principal by the repository beneath it: a foreign account id is
+        // indistinguishable from an unknown one, and no route accepts a
+        // principal from the client.
+        if (path === '/api/mail/accounts') {
+          if (method === 'GET') {
+            return send(res, 200, await listMailAccounts(container, scope));
+          }
+          if (method === 'POST') {
+            const body = await readJson(req);
+            const started = await beginMailConnect(container, scope, {
+              provider: body['provider'],
+              redirectUri: `${config.mailRedirectBase}/oauth/mail/callback`,
+              accountId: typeof body['accountId'] === 'string' ? body['accountId'] : null,
+            });
+            // Only the provider's own consent URL crosses to the browser. No
+            // client secret, no state secret beyond the one the provider will
+            // echo back, and no token.
+            return send(res, 200, { authorizationUrl: started.authorizationUrl });
+          }
+          return send(res, 405, { error: 'method not allowed' });
+        }
+
+        const mailAccountMatch = /^\/api\/mail\/accounts\/([0-9a-fA-F-]+)$/.exec(path);
+        if (mailAccountMatch) {
+          const id = mailAccountMatch[1]!;
+          if (method === 'DELETE') {
+            await disconnectMailAccount(container, scope, id);
+            return send(res, 200, { ok: true });
+          }
+          if (method === 'PATCH') {
+            const body = await readJson(req);
+            if (typeof body['feedsInbound'] !== 'boolean') {
+              throw new DomainError('validation', 'feedsInbound must be true or false.');
+            }
+            const account = await setMailAccountFeeds(
+              container,
+              scope,
+              id,
+              body['feedsInbound'],
+            );
+            return send(res, 200, { account });
+          }
+          return send(res, 405, { error: 'method not allowed' });
         }
 
         if (method === 'GET' && path === '/api/graph') {

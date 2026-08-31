@@ -41,11 +41,20 @@
             <span class="sub" id="brand-sub">Context OS</span>
           </span>
           <span class="brand-id" id="brand-id">—</span>
+          <!-- Two DIFFERENT identities, never conflated (T3.3-CORRECTION):
+               the workspace's head, read from the membership that carries the
+               `owner` role, and the person whose credential is in force. Both
+               come from /api/me; neither is a constant in this page. -->
+          <span class="ident" id="ident">
+            <span class="who head"><span class="k label">Head</span><span class="v" id="ident-head">—</span></span>
+            <span class="who you"><span class="k label">You</span><span class="v" id="ident-you">—</span><span class="role label" id="ident-role"></span></span>
+          </span>
           <span class="tools">
             <button class="iconbtn" id="t-search" aria-label="Search the workspace">⌕</button>
             <button class="iconbtn" id="t-brain" aria-label="Open the Second Brain" aria-pressed="false">◎</button>
             <button class="iconbtn" id="t-reset" aria-label="Reset the view">⊹</button>
             <button class="iconbtn" id="t-help" aria-label="Toggle field readouts" aria-pressed="true">ⓘ</button>
+            <button class="iconbtn" id="t-settings" aria-label="Open account settings" aria-expanded="false">⚙</button>
           </span>
         </div>
 
@@ -151,7 +160,7 @@
         <div class="os-field" id="os-field">
           <svg class="ring-svg" id="osvg" viewBox="0 0 1000 1000" preserveAspectRatio="xMidYMid meet"
                role="group"
-               aria-label="Command centre. A ring of the workspace's capabilities around its core. Activate the core to open the Second Brain.">
+               aria-label="Command centre. The DEVWORKSPACE core, orbited by the artifacts this workspace has actually produced. Activate the core to open the Second Brain.">
             <defs>
               <filter id="cr-soft" x="-80%" y="-80%" width="260%" height="260%">
                 <feGaussianBlur stdDeviation="58" />
@@ -173,14 +182,14 @@
             <button class="backbtn" id="brain-back">← BACK TO DEVWORKSPACE</button>
             <span class="brain-title">
               <span class="name">SECOND BRAIN</span>
-              <span class="sub label">Concentric context map</span>
+              <span class="sub label">Radial sector tree</span>
             </span>
             <span class="brain-meta mono" id="brain-meta">—</span>
           </div>
 
           <svg class="field-svg" id="fsvg" viewBox="0 0 1000 1000" preserveAspectRatio="xMidYMid meet"
                role="application" aria-roledescription="Second Brain — concentric context map"
-               aria-label="The workspace as concentric rings: capabilities, projects and the context captured into them. Drag to pan, scroll to zoom, click a node to inspect it. Use the search field in the graph controls for keyboard access to any node.">
+               aria-label="The workspace as a radial tree: a hub at the centre, executable skills on the inner ring, each project in its own angular sector, and that project's context fanning outward along its own spokes. Hovering or focusing a project dims the other branches. Drag to pan, scroll to zoom, click a node to inspect it. Use the search field in the graph controls for keyboard access to any node.">
             <defs>
               <pattern id="grid" width="46" height="46" patternUnits="userSpaceOnUse">
                 <circle class="gridbg" cx="2" cy="2" r="0.9" />
@@ -192,12 +201,13 @@
             <rect class="hexfill" x="-500" y="-500" width="2000" height="2000" fill="url(#grid)" />
             <!-- one transform on #viewport carries all pan/zoom -->
             <g id="viewport">
-              <!-- Ring structure and particle field: NON-DATA texture plus ring
-                   annotations whose names and counts come from the payload. -->
+              <!-- Sector structure and particle field: NON-DATA texture plus
+                   sector labels whose project names and counts come from the
+                   payload. There is no ring-per-data-type annotation any more. -->
               <circle id="core-bloom" class="core-bloom" cx="500" cy="500" r="230" filter="url(#soft)" aria-hidden="true" />
               <g id="g-atmosphere" aria-hidden="true"></g>
               <g id="g-edges"></g>
-              <!-- inner ring: real capabilities, never graph objects -->
+              <!-- ring 1: real executable skills, never graph objects -->
               <g id="g-caps"></g>
               <!-- verb + direction labels, only for the selection's revealed edges -->
               <g id="g-edgelabels"></g>
@@ -245,7 +255,7 @@
           </section>
 
           <div class="legend-pill" aria-label="Ring legend">
-            <span class="li"><span class="sw sem-action"></span>Capability</span>
+            <span class="li"><span class="sw sem-action"></span>Skill</span>
             <span class="li"><span class="sw sem-domain"></span>Project</span>
             <span class="li"><span class="sw sem-memory"></span>Context</span>
             <span class="li"><span class="sw sem-temporal"></span>Task</span>
@@ -417,46 +427,57 @@
           <p class="rail-quiet" id="repo-foot">—</p>
         </section>
 
-        <!-- EMAIL — the reference's inbound-demand module. DEVWORKSPACE has no
-             mail integration, so the surface is present and the state is
-             stated: nothing is counted, nothing is listed, and no message,
-             sender or timestamp is invented (T3.2 §7, §23). -->
-        <section class="sect" aria-labelledby="s-email">
+        <!-- ATTENTION STACK / INBOUND QUEUE (T3.3-CORRECTION §3).
+             This replaced a dead `EMAIL — NOT CONNECTED` placeholder. It is
+             one developer triage surface fed by MANY sources — pull requests
+             needing review, CI runs that did not succeed, open issues, and
+             e-mail from accounts the CURRENT USER connected. Mail is one
+             source, not the surface.
+
+             Every row is real. A source that is not configured, not connected
+             or unreadable states which of those it is, in words, and
+             contributes no rows — an unreadable source never degrades into an
+             empty queue that reads as "nothing needs you". A category pill
+             prints a count only when every source feeding it returned a
+             provably complete answer. -->
+        <section class="sect" aria-labelledby="s-inbound">
           <header>
-            <span class="glyph" aria-hidden="true">✉</span><span class="label" id="s-email">Email</span>
-            <span class="meta tag offline">Not connected</span>
+            <span class="glyph" aria-hidden="true">⌸</span><span class="label" id="s-inbound">Attention Stack</span>
+            <span class="meta tag" id="inbound-state">Loading</span>
           </header>
-          <div class="hero-count">
-            <span class="metric off" id="email-n">—</span>
-            <span class="hc-l"><span class="label">Emails</span><span class="label sub">Past 24h</span></span>
+
+          <div class="pills" id="inbound-pills" aria-label="What is waiting, by kind"></div>
+
+          <ul class="attn-list" id="inbound-rows" aria-label="Inbound items needing attention"></ul>
+          <p class="rail-quiet" id="inbound-empty" hidden>—</p>
+
+          <div class="label">Sources</div>
+          <ul class="src-list" id="inbound-sources"></ul>
+
+          <div class="btnrow">
+            <button class="pill ghost sm" id="inbound-mail">Mail accounts</button>
           </div>
-          <div class="label">Flagged · needs you</div>
-          <ul class="msg-list" aria-label="Flagged messages — none, no provider connected">
-            <li class="msg empty"><span class="ic" aria-hidden="true">▫</span><span class="t">—</span><span class="tm">—</span></li>
-            <li class="msg empty"><span class="ic" aria-hidden="true">▫</span><span class="t">—</span><span class="tm">—</span></li>
-            <li class="msg empty"><span class="ic" aria-hidden="true">▫</span><span class="t">—</span><span class="tm">—</span></li>
-          </ul>
-          <div class="label">Today's mix</div>
-          <div class="mixbar" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i><i></i></div>
-          <p class="rail-quiet">
-            Preview surface. No mail provider is connected to this workspace, so
-            no count, message or timestamp is shown.
-          </p>
         </section>
 
         <!-- SKILLS DECK — the reference's runnable-command cards, carrying only
-             capabilities the product actually has. The meta line shows the
-             assistant's REAL provider when its /healthz answers, and says
-             `offline` when it does not. No model or effort badge is ever
-             invented (T3.2 §8). -->
-        <!-- Executability is a STATE, not a decoration (T3.3.5). A card is
+             capabilities the product actually has.
+
+             Executability is a STATE, not a decoration (T3.3.5). A card is
              pressable only while the engine behind it is actually reachable:
              /capture runs in the core and is always available, while the three
              assistant skills are disabled — with the reason stated in words —
              whenever the assistant does not answer its /healthz. Pressing a
              card shows it running, its elapsed time, and whether it succeeded
-             or failed. No effort tier is shown anywhere, because the service
-             exposes none, and a development stub is named as a stub. -->
+             or failed.
+
+             CONFIGURATION (T3.3-CORRECTION §5). Each assistant-backed card
+             carries a model/effort control showing the configuration that will
+             ACTUALLY execute. The popover offers the full matrix, but an option
+             the configured runtime cannot run is rendered unavailable and
+             cannot be selected — and the pipeline refuses it as well, so an
+             unsupported combination cannot be made to appear to have run. The
+             development stub is not a model: while it is what answers, every
+             model and every effort is unavailable and the card says so. -->
         <section class="sect" aria-labelledby="s-skills">
           <header>
             <span class="glyph" aria-hidden="true">⌁</span><span class="label" id="s-skills">Skills Deck</span>
@@ -476,6 +497,7 @@
               <span class="run" aria-hidden="true">▶</span>
               <span class="sd">Answer from your context, grounded in real objects</span>
               <span class="sk-meta mono" data-assistant>assistant · …</span>
+              <button class="sk-cfg mono" type="button" data-cfg="ask" aria-haspopup="dialog" aria-expanded="false">—</button>
               <span class="sk-state mono" data-state role="status" aria-live="polite"></span>
             </div>
             <div class="skill click" id="flow-summarize" role="button" tabindex="0">
@@ -483,6 +505,7 @@
               <span class="run" aria-hidden="true">▶</span>
               <span class="sd">Condense the current scope</span>
               <span class="sk-meta mono" data-assistant>assistant · …</span>
+              <button class="sk-cfg mono" type="button" data-cfg="summarize" aria-haspopup="dialog" aria-expanded="false">—</button>
               <span class="sk-state mono" data-state role="status" aria-live="polite"></span>
             </div>
             <div class="skill click" id="flow-extract" role="button" tabindex="0">
@@ -490,9 +513,11 @@
               <span class="run" aria-hidden="true">▶</span>
               <span class="sd">Pull action items from the current scope</span>
               <span class="sk-meta mono" data-assistant>assistant · …</span>
+              <button class="sk-cfg mono" type="button" data-cfg="extract" aria-haspopup="dialog" aria-expanded="false">—</button>
               <span class="sk-state mono" data-state role="status" aria-live="polite"></span>
             </div>
           </div>
+          <p class="sect-note" id="skill-runtime">—</p>
         </section>
 
         <!-- ROUTINES — the reference's temporal schedule module, now carrying
@@ -517,6 +542,79 @@
           </table>
           <p class="rail-quiet" id="routines-note">—</p>
         </section>
+      </aside>
+
+      <!-- ===== ARTIFACT DETAIL (T3.3-CORRECTION §1.3) =====
+           Opened from an orbit node. It exposes the artifact's real identity —
+           its stable reference, its category, the instant it was produced, the
+           system that produced it — and offers OPEN SOURCE only when a real
+           URL exists, and OPEN IN SECOND BRAIN only when a real internal object
+           is behind it. A field the record does not carry is not rendered. -->
+      <div class="modal" id="artifact-modal" hidden>
+        <div class="modal-scrim" id="artifact-scrim"></div>
+        <div class="modal-card" role="dialog" aria-modal="true" aria-labelledby="af-title">
+          <header>
+            <span class="label" id="af-kind">Artifact</span>
+            <span class="mono ct" id="af-when">—</span>
+            <button class="iconbtn close" id="af-close" aria-label="Close artifact">✕</button>
+          </header>
+          <div class="modal-body">
+            <h2 id="af-title">—</h2>
+            <div class="meta-row mono" id="af-ref">—</div>
+            <dl class="af-meta" id="af-meta"></dl>
+            <div class="modal-actions">
+              <button class="pill" id="af-source" hidden>Open source ↗</button>
+              <button class="pill ghost" id="af-object" hidden>Open in Second Brain</button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ===== SKILL CONFIGURATION POPOVER (T3.3-CORRECTION §5.1) =====
+           The matrix is built in script from what the runtime REPORTS it can
+           execute; an option outside that set is rendered disabled with the
+           reason, and selecting it is impossible. -->
+      <div class="cfg-pop" id="cfg-pop" role="dialog" aria-label="Model and effort" hidden>
+        <header><span class="label" id="cfg-title">Configuration</span>
+          <button class="iconbtn close" id="cfg-close" aria-label="Close configuration">✕</button>
+        </header>
+        <div class="label">Model</div>
+        <div class="cfg-grid" id="cfg-models"></div>
+        <div class="label">Effort</div>
+        <div class="cfg-grid" id="cfg-efforts"></div>
+        <p class="cfg-note" id="cfg-note">—</p>
+      </div>
+
+      <!-- ===== SETTINGS · MAIL ACCOUNTS (T3.3-CORRECTION §4.3) =====
+           An account belongs to the user who connected it. This panel lists
+           only the CURRENT user's accounts; it can never show another member's,
+           and workspace headship grants no access to anyone's mailbox.
+           Authentication happens at the provider — there is no password field
+           on this surface, and there is nowhere for one to be added. -->
+      <aside class="settings" id="settings" hidden aria-label="Account settings">
+        <header>
+          <span class="label">Settings</span>
+          <span class="mono ct" id="settings-who">—</span>
+          <button class="iconbtn close" id="settings-close" aria-label="Close settings">✕</button>
+        </header>
+        <div class="settings-body">
+          <div class="label">Your identity</div>
+          <ul class="kv" id="settings-identity"></ul>
+
+          <div class="label">Mail accounts</div>
+          <p class="sect-note" id="mail-note">—</p>
+          <ul class="mail-list" id="mail-accounts"></ul>
+          <div class="label">Add an account</div>
+          <div class="btnrow" id="mail-providers"></div>
+          <p class="rail-quiet" id="mail-privacy">
+            Mail accounts are yours. Messages from an account you connect are
+            shown only to you, in your own Attention Stack — being the head of
+            this workspace grants no access to anyone's mailbox, and connecting
+            one grants no one access to yours. DEVWORKSPACE never sees your mail
+            password: you authenticate at the provider, and the grant is stored
+            encrypted and can be revoked here at any time.
+          </p>
+        </div>
       </aside>
     </div>
 

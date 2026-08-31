@@ -12,7 +12,14 @@
 // citation cannot produce a citation in the UI; a model that invents a source
 // cannot produce a task that claims to come from one.
 
-import type { LLMProvider, LlmRequest } from './ports/llm.ts';
+import {
+  isEffortLevel,
+  isModelTier,
+  type EffortLevel,
+  type LLMProvider,
+  type LlmRequest,
+  type ModelTier,
+} from './ports/llm.ts';
 
 /* ------------------------------------------------------- context client -- */
 
@@ -142,6 +149,16 @@ export interface AskResult {
   readonly evidenceCount: number;
   readonly grounded: boolean;
   readonly provider: string;
+  /**
+   * The configuration that ACTUALLY ran (T3.3-CORRECTION). The Skills card
+   * displays this, not the one it asked for, so a badge can never outlive the
+   * request that produced it.
+   */
+  readonly configuration: {
+    readonly model: string;
+    readonly tier: ModelTier | null;
+    readonly effort: EffortLevel | null;
+  };
   readonly weightSetVersion: string;
   readonly projectId: string | null;
 }
@@ -157,6 +174,9 @@ export interface AskInput {
   readonly question: string;
   readonly userCredential: string;
   readonly targetId?: string | null;
+  /** Requested model tier / effort level. Validated before anything is run. */
+  readonly model?: unknown;
+  readonly effort?: unknown;
 }
 
 export async function runAsk(
@@ -166,6 +186,36 @@ export async function runAsk(
   const question = String(input.question ?? '').trim();
   if (!question) {
     return { ok: false, stage: 'context', reason: 'empty_question', detail: 'Ask a question.' };
+  }
+
+  // --- CONFIGURATION: refuse what the runtime cannot execute ---------------
+  // A UI option is not runtime support. An unsupported model or effort is
+  // rejected HERE, before any context is fetched and before the model is
+  // called, so an unsupported combination can never appear to have run.
+  const capabilities = deps.llm.describe();
+  let model: ModelTier | undefined;
+  let effort: EffortLevel | undefined;
+  if (input.model !== undefined && input.model !== null && input.model !== '') {
+    if (!isModelTier(input.model) || !capabilities.models.includes(input.model)) {
+      return {
+        ok: false,
+        stage: 'model',
+        reason: 'unsupported_model',
+        detail: `The configured runtime (${capabilities.kind}) cannot run "${String(input.model)}".`,
+      };
+    }
+    model = input.model;
+  }
+  if (input.effort !== undefined && input.effort !== null && input.effort !== '') {
+    if (!isEffortLevel(input.effort) || !capabilities.efforts.includes(input.effort)) {
+      return {
+        ok: false,
+        stage: 'model',
+        reason: 'unsupported_effort',
+        detail: `The configured runtime (${capabilities.kind}) exposes no "${String(input.effort)}" effort level.`,
+      };
+    }
+    effort = input.effort;
   }
 
   const intent = resolveIntent(question);
@@ -194,6 +244,8 @@ export async function runAsk(
       title: i.object.title,
       body: i.object.body,
     })),
+    ...(model ? { model } : {}),
+    ...(effort ? { effort } : {}),
   };
 
   let result;
@@ -256,7 +308,14 @@ export async function runAsk(
     // An answer with evidence but no surviving citation is ungrounded; the UI
     // says so rather than presenting it as fact.
     grounded: set.items.length === 0 ? false : citations.length > 0,
-    provider: deps.llm.describe().kind,
+    provider: capabilities.kind,
+    configuration: {
+      // What the provider says it ran, falling back to its declared default —
+      // never to what the caller asked for.
+      model: result.usedModel ?? capabilities.model,
+      tier: model ?? capabilities.tier,
+      effort: result.usedEffort ?? effort ?? capabilities.defaultEffort,
+    },
     weightSetVersion: set.weightSetVersion,
     projectId: set.resolved.projectId,
   };
