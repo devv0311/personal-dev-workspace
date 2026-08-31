@@ -1,23 +1,27 @@
 /* =============================================================================
-   T3.1 — Visual Shell, reconciled against
-   Design_Dashboard_Aesthetic_Claude_Blueprint.md (the authority).
+   T3.1 — Reference UI Reconstruction.
 
-   What this revision establishes / corrects (blueprint §13 deviations 1–5):
-   1. Colour: `--apps` / `--memory` / `--routines` retired. One action accent
-      doing only three jobs (now/next · action · current focus); a four-tier
-      greyscale contrast ladder; a bounded, token-named categorical set
-      (`--proj-1..8`) reserved for Project identity and applied additively —
-      class is carried in text, never by hue alone (§4.5, §4.13, §5.4, Q1).
-   2. The offline APPLICATIONS / ROUTINES orbits are removed, not dimmed (§5.11).
-   3. Ambient / orbital rotation is gone; nothing continuous moves (§7).
-   4. Retired reference widgets (Skills Deck, Routines Monitor, Micro Apps
-      launchers, "Today's mix") are not recreated. Sparse rails are correct
-      (§4.1, §12, Q5).
-   5. Relationship rows carry verb + direction + confidence as text and an
-      expandable slot for provenance (§5.3, §6.4, Q7).
+   The RUBRIC command-centre visual/interaction system, reconstructed as
+   closely as practical over the REAL DEVWORKSPACE data model:
+     • restrained centred header with a thin accent top rule and a compact
+       icon cluster;
+     • two dense typographic intelligence rails on a shared black ground,
+       hairline-divided, cards reserved for runnable things;
+     • a visually dominant central field — a restrained bloom, a faint
+       wireframe enclosure, concentric orbital guides and a particle
+       atmosphere (all NON-DATA texture) around the real workspace objects;
+     • spatial search that attenuates the whole surface and lights matches in
+       place; selection reveals a node's real, typed, directional, provenanced
+       relationships;
+     • the right rail's Skills deck and temporal Activity strip carry the
+       reference's card and schedule treatments but only ever real
+       capabilities and real events — nothing is fabricated to fill space.
 
-   The command-centre composition, the interactive graph (P3.2) and the
-   cross-surface object identity (P3.3) are preserved unchanged.
+   Preserved from P3.2 / P3.3: the interactive graph engine, cross-surface
+   object identity, reason-giving, relationship provenance, capture, connect.
+   The reference's ARMS taxonomy is NOT adopted — no Applications / Routines /
+   Memory / Skills object classes, no run-artefact badges, no invented data.
+   Motion budget (§7): nothing continuous moves; ambient rotation is off.
    ========================================================================== */
 
 :root {
@@ -58,9 +62,12 @@
   --font-ui: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
   --font-mono: "JetBrains Mono", ui-monospace, "SF Mono", Menlo, Consolas, monospace;
 
-  --header-h: 46px;
-  /* Rails are a true 23% band through the primary desktop range (§4.1). */
-  --rail-w: clamp(256px, 23%, 384px);
+  --header-h: 48px;
+  /* Asymmetric rails, matching the reference: the left rail (what you reach
+     for) is tighter than the right (what wants you). The central field keeps
+     ~50% and stays the dominant surface (§4.1). */
+  --rail-l: clamp(244px, 22%, 344px);
+  --rail-r: clamp(268px, 26%, 392px);
 
   color-scheme: dark;
 }
@@ -77,11 +84,18 @@ body {
   line-height: 1.45;
   -webkit-font-smoothing: antialiased;
 }
-/* A 1px structural hairline at the very top edge — division, not accent. */
+/* A thin warm rule along the very top edge — the reference's one structural
+   accent, fading out at the corners so it frames rather than underlines. */
 body::before {
   content: "";
   position: fixed; inset: 0 0 auto 0; height: 1px;
-  background: var(--hair-2);
+  background: linear-gradient(
+    90deg,
+    transparent,
+    rgba(255, 122, 26, 0.55) 12%,
+    rgba(255, 122, 26, 0.55) 88%,
+    transparent
+  );
   z-index: 50; pointer-events: none;
 }
 
@@ -161,7 +175,7 @@ body::before {
 .shell {
   display: grid;
   grid-template-rows: var(--header-h) 1fr;
-  grid-template-columns: var(--rail-w) minmax(0, 1fr) var(--rail-w);
+  grid-template-columns: var(--rail-l) minmax(0, 1fr) var(--rail-r);
   grid-template-areas: "header header header" "left center right";
   height: 100vh;
   overflow: hidden;
@@ -179,12 +193,18 @@ body::before {
 }
 .header .h-left  { display: flex; align-items: center; gap: var(--s3); }
 .header .h-right { display: flex; align-items: center; gap: var(--s2); justify-content: flex-end; }
-.brand { display: flex; align-items: baseline; gap: var(--s2); justify-self: center; }
-.brand .mark { width: 15px; height: 15px; color: var(--action); align-self: center; }
-.brand .name { font: 650 12px/1 var(--font-ui); letter-spacing: 0.14em; text-transform: uppercase; }
+/* Wordmark, a quiet identity line, then a compact icon cluster — stacked and
+   centred, the reference's restrained header treatment. */
+.brand { display: flex; flex-direction: column; align-items: center; gap: 1px; justify-self: center; padding: 2px 0; }
+.brand .brand-line { display: flex; align-items: baseline; gap: var(--s2); }
+.brand .mark { width: 13px; height: 13px; color: var(--action); align-self: center; }
+.brand .name { font: 650 11.5px/1 var(--font-ui); letter-spacing: 0.15em; text-transform: uppercase; }
 .brand .name b { color: var(--action); font-weight: 650; }
-.brand .sub { font: 500 9px/1 var(--font-ui); letter-spacing: 0.14em; text-transform: uppercase; color: var(--ink-faint); margin-right: var(--s3); }
-.header .tools { display: flex; align-items: center; gap: 3px; padding-left: var(--s2); border-left: 1px solid var(--hair-faint); }
+.brand .sub { font: 500 8px/1 var(--font-ui); letter-spacing: 0.15em; text-transform: uppercase; color: var(--ink-faint); }
+.brand .brand-id { font-size: 7.5px; letter-spacing: 0.1em; color: var(--ink-ghost); text-transform: uppercase; }
+.header .tools { display: flex; align-items: center; gap: 2px; }
+.header .tools .iconbtn { width: 20px; height: 18px; font-size: 10.5px; }
+.header .tools .iconbtn[aria-pressed="false"] { color: var(--ink-ghost); opacity: 0.5; }
 .principal-select {
   font: 500 10px/1 var(--font-mono);
   color: var(--ink-dim);
@@ -196,6 +216,12 @@ body::before {
 }
 .dev-flag { font: 600 8px/1 var(--font-ui); letter-spacing: 0.13em; color: var(--ink-ghost); }
 .rail-toggle { display: none; }
+
+/* Workspace / project context — real, from the loaded graph. A quiet readout,
+   not a control: object count at rest, the selected project when one is focused. */
+.wsctx { display: flex; align-items: baseline; gap: 6px; padding-left: var(--s3); border-left: 1px solid var(--hair-faint); white-space: nowrap; overflow: hidden; }
+.wsctx .k { color: var(--ink-ghost); }
+.wsctx .v { font-size: 9.5px; color: var(--ink-dim); letter-spacing: 0.04em; overflow: hidden; text-overflow: ellipsis; }
 
 /* ---- rails: borderless typographic regions on the shared ground ----- */
 .rail {
@@ -217,16 +243,50 @@ body::before {
 .center { grid-area: center; position: relative; min-width: 0; overflow: hidden; }
 .field-wrap { position: absolute; inset: 0; pointer-events: none; }
 .field-wrap > svg, .field-wrap .inspector, .field-wrap .legend-pill,
-.field-wrap .gctl, .field-wrap .askp { pointer-events: auto; }
+.field-wrap .gctl, .field-wrap .askp, .field-wrap .spotlight { pointer-events: auto; }
 .field-svg {
   position: absolute; inset: 0; width: 100%; height: 100%; display: block;
   cursor: grab; touch-action: none; --zoom: 1;
+  /* Colour of the central bloom. Neutral-warm at rest; JS tints it toward the
+     focused Project's identity hue on selection (the room is lit by what you
+     are holding — reference §2.6). */
+  --bloom: #ff7a1a;
 }
 .field-svg.grabbing { cursor: grabbing; }
 #viewport { will-change: transform; }
 /* Search spotlight: the field attenuates, matches stay in place (§5.7). */
-.field-svg.searching #g-nodes .gnode:not(.match):not(.sel) { opacity: 0.28; }
-.field-svg.searching #g-edges { opacity: 0.3; }
+.field-svg.searching #g-nodes .gnode:not(.match):not(.sel) { opacity: 0.22; }
+.field-svg.searching #g-edges { opacity: 0.25; }
+.field-svg.searching #g-atmosphere { opacity: 0.4; }
+
+/* HUD chrome toggle (header ⓘ) — hide the ambient readouts without touching
+   the field itself. */
+.field-wrap.hud-hidden .legend-pill,
+.field-wrap.hud-hidden .field-readout { display: none; }
+
+/* ---- ambient spatial atmosphere: NON-DATA texture only -----------------
+   Reproduces the reference centrepiece — a volume of accumulated material in
+   a faint faceted enclosure with concentric orbital structure — without any
+   of it being a workspace object. It lives inside #viewport, so it pans and
+   zooms with the real graph as one composition, and it is inert to input. */
+#g-atmosphere { pointer-events: none; }
+.core-bloom { fill: var(--bloom); opacity: 0.11; pointer-events: none; transition: opacity 240ms; }
+.center.inspecting .core-bloom { opacity: 0.14; }
+/* faceted wireframe enclosure — depth carried by per-edge opacity from JS */
+.atmo-edge { stroke: #b8bfce; stroke-width: 0.5; vector-effect: non-scaling-stroke; }
+/* concentric orbital guides at the project ring and the context band */
+.atmo-ring { fill: none; stroke: rgba(255, 255, 255, 0.032); stroke-width: 0.6; vector-effect: non-scaling-stroke; }
+.atmo-spoke { stroke: rgba(255, 255, 255, 0.022); stroke-width: 0.5; vector-effect: non-scaling-stroke; }
+/* the particle field — mass, not data. Low saturation so it never reads as a
+   semantic colour channel; opacity is set per-particle in JS. */
+.atmo-p { }
+.atmo-p.n { fill: #ccd2dd; }
+.atmo-p.w { fill: #f0b184; }
+.atmo-p.c { fill: #86c3d6; }
+.atmo-p.v { fill: #b79ae0; }
+@media (prefers-reduced-motion: reduce) {
+  .core-bloom { transition: none; }
+}
 
 .field-readout {
   position: absolute; font: 500 8.5px/1.5 var(--font-mono);
@@ -261,13 +321,31 @@ body::before {
 
 .mem-anchor { stroke: rgba(255, 255, 255, 0.08); stroke-width: 0.6; }
 
-/* ---- edges: real relationships only ------------------------------ */
+/* ---- edges: real relationships only ------------------------------
+   Relationships are a query result, not permanent decoration (§5.6). At rest
+   the field stays quiet — structural containment is barely there, an authored
+   link only slightly more present. Selection is what reveals them. */
 .edge-line { stroke-width: 1; transition: stroke 140ms, opacity 140ms; }
-.edge-line.structural { stroke: rgba(255,255,255,0.10); }
-.edge-line.anchor     { stroke: rgba(255,255,255,0.16); }
-.edge-line.authored   { stroke: rgba(255,255,255,0.30); stroke-dasharray: 4 3; }
-.edge-line.mute       { opacity: 0.22; }
-.edge-line.hot        { stroke: rgba(255,122,26,0.75); stroke-width: 1.6; opacity: 1; }
+.edge-line.structural { stroke: rgba(255,255,255,0.055); }
+.edge-line.anchor     { stroke: rgba(255,255,255,0.09); }
+.edge-line.authored   { stroke: rgba(255,255,255,0.17); stroke-dasharray: 4 3; }
+.edge-line.mute       { opacity: 0.14; }
+.edge-line.hot        { stroke: rgba(255,122,26,0.8); stroke-width: 1.7; opacity: 1; }
+
+/* The revealed relationship names itself: verb + direction, in text. */
+.edge-label .et {
+  fill: var(--action-2);
+  font-family: var(--font-mono);
+  font-size: calc(8px / var(--zoom, 1));
+  letter-spacing: 0.04em;
+  text-anchor: middle;
+  dominant-baseline: central;
+  paint-order: stroke;
+  stroke: #000;
+  stroke-width: calc(3.5px / var(--zoom, 1));
+  stroke-linejoin: round;
+  pointer-events: none;
+}
 
 /* ---- nodes: one uniform mark per structural kind; class is in text ---- */
 .gnode { cursor: pointer; }
@@ -362,18 +440,78 @@ body::before {
 .node-tip .tm { font: 500 9px/1.3 var(--font-mono); color: var(--ink-faint); letter-spacing: 0.03em; }
 .node-tip .ts { font: 400 10px/1.4 var(--font-ui); color: var(--ink-dim); margin-top: 2px; }
 
-/* ---- graph control panel (blueprint §6) -------------------------- */
+/* ---- spatial search: attenuate the world, light matches in place ------
+   Activating search (header ⌕ or "/") drops a compact centred field over the
+   command centre and dims everything that is not a match — rails, header,
+   atmosphere and unmatched nodes — while matches keep the exact position they
+   already hold (§5.7). It subtracts rather than replaces, so the map is
+   learned once instead of a list re-read each time. */
+body.searching .rail,
+body.searching .header .h-left,
+body.searching .header .h-right,
+body.searching .brand .brand-line,
+body.searching .brand .brand-id,
+body.searching .legend-pill,
+body.searching .gctl:not(:focus-within),
+body.searching .askp {
+  opacity: 0.16;
+  transition: opacity 160ms;
+  pointer-events: none;
+}
+body.searching .center.inspecting .inspector { opacity: 0.16; pointer-events: none; }
+
+.spotlight {
+  position: absolute; top: 20px; left: 50%; transform: translateX(-50%);
+  z-index: 20; width: min(420px, 76%);
+  background: rgba(4, 4, 5, 0.96); border: 1px solid var(--hair-2);
+  box-shadow: 0 18px 50px -18px #000;
+}
+.spotlight .sl-in { display: flex; align-items: center; gap: var(--s2); padding: 7px 8px 7px 11px; }
+.spotlight .sl-in .ic { color: var(--action); font-size: 12px; }
+.spotlight input {
+  flex: 1; min-width: 0; background: transparent; border: none; outline: none;
+  color: var(--ink); font: 400 12px/1.3 var(--font-ui); letter-spacing: 0.01em;
+}
+.spotlight input::placeholder { color: var(--ink-ghost); }
+.spotlight input::-webkit-search-cancel-button { display: none; }
+.spotlight .close { color: var(--ink-faint); }
+.sl-results { list-style: none; margin: 0; padding: 0; max-height: 208px; overflow-y: auto; border-top: 1px solid var(--hair-faint); scrollbar-width: thin; }
+.sl-results li {
+  display: grid; grid-template-columns: 7px 1fr auto; gap: var(--s2); align-items: center;
+  padding: 6px 11px; cursor: pointer; border-left: 2px solid transparent;
+}
+.sl-results li:hover { background: rgba(255, 255, 255, 0.04); }
+.sl-results li.cur { border-left-color: var(--action); background: rgba(255, 122, 26, 0.08); }
+.sl-results .sw { width: 6px; height: 6px; border-radius: 50%; background: var(--ink-dim); }
+.sl-results .rt { font: 400 11px/1.3 var(--font-ui); color: var(--ink); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.sl-results .rk { font: 600 7.5px/1 var(--font-ui); letter-spacing: 0.1em; text-transform: uppercase; color: var(--ink-ghost); }
+.sl-results .none { padding: 8px 11px; color: var(--ink-faint); font-size: 10.5px; }
+
+/* ---- graph control panel (blueprint §6) -------------------------------
+   Docked in the field's top-right. At rest it is FOLDED — a quiet corner
+   readout (label · node count · disclosure), carrying almost no visual weight
+   and reserving almost none of the field, so the graph frames near-centred and
+   the negative space around it stays symmetric. Expanding it (the ▸ control,
+   the header search glyph, or "/") gives the controls a real surface and the
+   graph reframes to stay clear of it. */
 .gctl {
-  position: absolute; top: 30px; right: 18px; z-index: 11; width: 246px;
-  background: rgba(3,3,4,0.9); border: 1px solid var(--hair-2);
+  position: absolute; top: 26px; right: 16px; z-index: 11; width: 232px;
+  border: 1px solid var(--hair-2);
+  background: rgba(3,3,4,0.92);
   backdrop-filter: blur(4px);
+  transition: background 140ms, border-color 140ms;
+}
+.gctl.folded {
+  width: auto; border-color: transparent; background: transparent; backdrop-filter: none;
 }
 .gctl > header {
   display: flex; align-items: center; gap: var(--s2);
   padding: 6px 8px 6px 10px; border-bottom: 1px solid var(--hair-faint);
   white-space: nowrap;
 }
+.gctl.folded > header { border-bottom: none; padding: 4px 4px 4px 8px; }
 .gctl > header .ct { margin-left: auto; font-size: 8.5px; color: var(--ink-ghost); letter-spacing: 0.06em; }
+.gctl.folded > header .label { color: var(--ink-ghost); }
 .gctl .gbody { padding: var(--s2) 10px 10px; display: flex; flex-direction: column; gap: 6px; }
 .gctl.folded .gbody { display: none; }
 .gctl .label { margin-top: 3px; }
@@ -514,6 +652,24 @@ body::before {
 .empty-ins { color: var(--ink-faint); padding: var(--s3) 0; font-size: 11px; }
 
 .meta-row { font-size: 8.5px; letter-spacing: 0.07em; color: var(--ink-ghost); margin-bottom: var(--s2); }
+
+/* ---- why this matters: reason-giving (§5.9) ----------------------
+   Each line states a reason and, in tier-4, the real field it came from, so a
+   claim on screen can always be traced. An inferred line is marked in WORDS —
+   colour only reinforces it (§4.13). */
+.why { margin: 4px 0 var(--s3); }
+.why-sum { margin: 0 0 5px; color: var(--ink-dim); font-size: 10.5px; }
+.why-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 4px; }
+.why-list li {
+  display: flex; flex-direction: column; gap: 1px;
+  padding-left: 9px; border-left: 1px solid var(--hair-2);
+  overflow-wrap: anywhere;
+}
+.why-list .wt { color: var(--ink-dim); font-size: 10.5px; line-height: 1.4; }
+.why-list .wev { color: var(--ink-ghost); font-size: 8px; letter-spacing: 0.03em; }
+/* Inference is never presented as fact: the row is marked and says "inferred". */
+.why-list li.inferred { border-left-color: var(--warn); }
+.why-list li.inferred .wt { color: var(--warn); }
 .ins-body {
   margin: 0 0 var(--s3); padding-left: 10px; border-left: 2px solid var(--hair-2);
   color: var(--ink-dim); font-size: 10.5px; line-height: 1.5; white-space: pre-wrap;
@@ -544,6 +700,9 @@ body::before {
 }
 .rel-list .ar { color: var(--ink-ghost); font-size: 10px; text-align: center; }
 .rel-list .ot { color: var(--ink); font-size: 10.5px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* An endpoint the read model could not resolve reads as a stated absence, not
+   as a title. The words already say so; this only stops it looking like data. */
+.rel-list .ot.unresolved { color: var(--ink-ghost); font-style: italic; }
 .rel-list .conf {
   font: 600 7.5px/1 var(--font-ui); letter-spacing: 0.09em;
   text-transform: uppercase; color: var(--ink-faint); white-space: nowrap;
@@ -617,8 +776,8 @@ body::before {
 .pm .n { font: 300 22px/1 var(--font-mono); color: var(--ink-dim); }
 .pm .n.real { color: var(--ink); }
 .pm .l { margin-top: 1px; }
-.actgrid { display: grid; grid-template-columns: repeat(10, 1fr); gap: 4px; margin-top: var(--s3); }
-.actgrid i { aspect-ratio: 1; border-radius: 50%; background: var(--hair); }
+.actgrid { display: grid; grid-template-columns: repeat(10, 1fr); gap: 4px; margin-top: var(--s3); justify-items: center; }
+.actgrid i { width: 100%; max-width: 11px; aspect-ratio: 1; border-radius: 50%; background: var(--hair); }
 .actgrid i.on { background: var(--ink-dim); cursor: pointer; transition: background 100ms, box-shadow 100ms; }
 .actgrid i.on:hover, .actgrid i.on:focus-visible { background: var(--action); box-shadow: 0 0 0 2px rgba(255,122,26,0.25); outline: none; }
 
@@ -633,6 +792,51 @@ body::before {
 .attn-row .t { color: var(--ink); font-size: 10.5px; }
 .attn-row .m { color: var(--ink-faint); font-size: 9px; }
 .attn-row .tm { color: var(--ink-ghost); font: 500 9px/1 var(--font-mono); }
+
+.sect > header .meta.note { margin-left: auto; font: 500 8px/1 var(--font-mono); letter-spacing: 0.06em; color: var(--ink-ghost); text-transform: none; }
+.sect-note { margin: 0 0 var(--s3); color: var(--ink-ghost); font-size: 9px; letter-spacing: 0.05em; }
+
+/* Skills — the reference's compact runnable-command cards. Elevation is
+   earned here: a filled, bordered surface means "this is a thing you can run"
+   (§4.9 / T14). Two-up grid, each card a slash-command name, a ▶ trigger, a
+   one-line description, and a mono meta line carrying the assistant's REAL
+   provider when it is reachable (never a fabricated model/effort badge). */
+.deck { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
+.skill {
+  display: grid; grid-template-columns: 1fr auto; gap: 2px var(--s2); align-items: center;
+  padding: 8px 9px 7px; background: rgba(255, 255, 255, 0.022);
+  border: 1px solid var(--hair-2); border-radius: 3px;
+  transition: border-color 120ms, background 120ms;
+}
+.skill .cmd { color: var(--ink); font-size: 10.5px; letter-spacing: 0.01em; }
+.skill .run { color: var(--action); font-size: 9px; justify-self: end; }
+.skill .sd { grid-column: 1 / -1; color: var(--ink-faint); font-size: 9px; line-height: 1.4; min-height: 38px; }
+.skill .sk-meta { grid-column: 1 / -1; font-size: 7.5px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--ink-ghost); }
+.skill.click { cursor: pointer; }
+.skill.click:hover, .skill.click:focus-visible { border-color: rgba(255, 122, 26, 0.5); background: rgba(255, 122, 26, 0.06); outline: none; }
+.skill.click:hover .cmd, .skill.click:focus-visible .cmd { color: var(--action); }
+
+/* Activity — the reference's compact schedule/timeline treatment. Real
+   events only: context captured into the workspace, most recent first. Past
+   rows are dimmed in place; the single most-recent row takes the accent, the
+   way the reference accents exactly one row. */
+.ttable { width: 100%; border-collapse: collapse; }
+.ttable thead th {
+  font: 600 7.5px/1 var(--font-ui); letter-spacing: 0.13em; text-transform: uppercase;
+  color: var(--ink-ghost); text-align: left; padding: 0 0 5px; border-bottom: 1px solid var(--hair-faint);
+}
+.ttable thead th:last-child { text-align: right; }
+.ttable tbody tr { border-bottom: 1px solid var(--hair-faint); cursor: pointer; }
+.ttable tbody tr:last-child { border-bottom: none; }
+.ttable tbody tr:hover .cx { color: var(--action); }
+.ttable td { padding: 6px 0; vertical-align: baseline; }
+.ttable .t { font: 500 9px/1 var(--font-mono); color: var(--ink-faint); letter-spacing: 0.02em; white-space: nowrap; padding-right: var(--s2); }
+.ttable .cx { color: var(--ink-dim); font-size: 10px; line-height: 1.35; overflow-wrap: anywhere; }
+.ttable .st { font: 600 7px/1 var(--font-ui); letter-spacing: 0.1em; text-transform: uppercase; color: var(--ink-ghost); text-align: right; white-space: nowrap; }
+/* Past is dimmed, not hidden; the newest row is the one that takes the accent. */
+.ttable tbody tr.past { opacity: 0.5; }
+.ttable tbody tr.latest .st { color: var(--action); }
+.ttable tbody tr.latest .t { color: var(--ink-dim); }
 
 /* =============================================================================
    RESPONSIVE — desktop command centre → laptop drawers → mobile sequential.
@@ -662,10 +866,11 @@ body::before {
   .shell { display: flex; flex-direction: column; height: auto; overflow: visible; }
   .header { order: 0; position: sticky; top: 1px; z-index: 30; background: var(--bg); grid-template-columns: auto 1fr; gap: var(--s2); padding: 0 var(--s3); }
   .header .h-left { display: none; }
-  .brand { justify-self: start; gap: 6px; }
-  .brand .sub, .header .tools, #p-graph, .dev-flag { display: none; }
+  .brand { justify-self: start; align-items: flex-start; gap: 1px; }
+  .brand .sub, .brand .brand-id, .header .tools, .dev-flag { display: none; }
   .principal-select { max-width: 130px; }
   .h-right { gap: 6px; }
+  .spotlight { top: 6px; width: calc(100% - 2 * var(--s3)); }
   .center { order: 1; overflow: visible; }
   .field-wrap { position: static; height: auto; }
   .field-svg { position: static; width: 100%; height: 88vw; }
@@ -700,3 +905,381 @@ body::before {
   * { transition-duration: 1ms !important; }
 }
 [hidden] { display: none !important; }
+
+/* =============================================================================
+   T3.2 — AGENTIC COMMAND CENTRE + RING-BASED SECOND BRAIN
+
+   Two places over one session:
+
+     OS COMMAND VIEW ──click core──▶ SECOND BRAIN ──← back──▶ OS COMMAND VIEW
+
+   The OS view's centre is a RING of the workspace's real capabilities around a
+   CORE carrying its identity and its real size. The Second Brain is the same
+   objects re-projected as concentric rings. Both sit inside a dense but
+   restrained non-data atmosphere: enclosure, guides, ticks, boundary, particle
+   mass. Every one of those is texture — no id, no count, no handler — so the
+   density is visual, never fabricated data (§1, §23).
+
+   Motion (§16): panels, labels, cards and rows are static. Motion is spent on
+   state transitions only — entering a place, hover, focus, selection, search.
+   ========================================================================== */
+
+:root {
+  /* Ring semantics (§6). Colour REINFORCES a class that is always also stated
+     in words, on the node, in the ring annotation and in the inspector. */
+  --sem-action:   #ff7a1a; /* core · capabilities · execution */
+  --sem-domain:   #37b6d9; /* projects — the workspace's domains */
+  --sem-memory:   #a97fe0; /* captured context */
+  --sem-temporal: #f5b53d; /* tasks — dated, actionable work */
+}
+
+/* ---- the two places ------------------------------------------------------
+   The inactive surface keeps its layout (visibility, not display) so the map
+   always has real dimensions and can be framed the instant it is entered. */
+.os-field, .field-wrap { position: absolute; inset: 0; }
+.os-field { pointer-events: none; }
+.os-field .ring-svg { pointer-events: auto; }
+.os-field, .field-wrap {
+  transition: opacity 240ms ease, transform 240ms ease, visibility 0s linear 0s;
+}
+body[data-view="os"] .field-wrap {
+  opacity: 0; visibility: hidden; transform: scale(1.05);
+  transition: opacity 240ms ease, transform 240ms ease, visibility 0s linear 240ms;
+}
+body[data-view="brain"] .os-field {
+  opacity: 0; visibility: hidden; transform: scale(0.94);
+  transition: opacity 240ms ease, transform 240ms ease, visibility 0s linear 240ms;
+}
+/* The spotlight, the tip and the assistant belong to the session, not to one
+   place, so they sit directly on the centre and survive the transition. */
+.center > .spotlight, .center > .askp, .center > .node-tip { pointer-events: auto; }
+.center > .node-tip { pointer-events: none; }
+
+.ring-svg {
+  position: absolute; inset: 0; width: 100%; height: 100%; display: block;
+}
+.os-readout {
+  position: absolute; font: 500 8.5px/1.5 var(--font-mono);
+  letter-spacing: 0.08em; color: var(--ink-ghost); pointer-events: none;
+}
+.os-readout.tl { top: 16px; left: 20px; }
+.os-readout.tr { top: 16px; right: 20px; text-align: right; }
+
+/* ---- command ring: non-data atmosphere ---------------------------------- */
+.cr-bloom { fill: var(--sem-action); opacity: 0.1; pointer-events: none; }
+.cr-bound { fill: none; stroke: rgba(255, 255, 255, 0.075); stroke-width: 1; stroke-dasharray: 2 11; }
+.cr-tick  { stroke: rgba(255, 255, 255, 0.09); stroke-width: 1; }
+.cr-tick.long { stroke: rgba(255, 255, 255, 0.2); stroke-width: 1.2; }
+.cr-guide { fill: none; stroke: rgba(255, 255, 255, 0.035); stroke-width: 0.8; }
+.cr-spoke { stroke: rgba(255, 255, 255, 0.022); stroke-width: 0.6; }
+.cr-shell { stroke: #b8bfce; stroke-width: 0.6; }
+.cr-p.n { fill: #ccd2dd; } .cr-p.w { fill: #f0b184; }
+.cr-p.c { fill: #86c3d6; } .cr-p.v { fill: #b79ae0; }
+/* Decorative ring geometry between the capability badges: hollow markers and
+   hairlines. No glyph, no label, no count, no handler — density, not data. */
+.cr-marker { fill: none; stroke: rgba(255, 255, 255, 0.085); stroke-width: 0.9; }
+.cr-hair   { stroke: rgba(255, 255, 255, 0.05); stroke-width: 0.7; }
+
+/* ---- command ring: the real capabilities -------------------------------- */
+.cr-badge { cursor: pointer; }
+.cr-badge .bg  { fill: rgba(8, 9, 12, 0.92); }
+.cr-badge .rim { fill: none; stroke: rgba(255, 255, 255, 0.17); stroke-width: 1.1; transition: stroke 140ms; }
+.cr-badge .hex { fill: none; stroke: rgba(255, 255, 255, 0.07); stroke-width: 0.8; }
+.cr-badge .gl  {
+  fill: var(--ink-dim); font-family: var(--font-ui); font-size: 21px;
+  text-anchor: middle; pointer-events: none; transition: fill 140ms;
+}
+.cr-badge .cap-label {
+  fill: var(--ink-faint); font: 600 11px var(--font-ui); letter-spacing: 0.18em;
+  text-anchor: middle; pointer-events: none; transition: fill 140ms;
+}
+.cr-badge .cap-cmd {
+  fill: var(--ink-ghost); font: 500 9.5px var(--font-mono); letter-spacing: 0.04em;
+  text-anchor: middle; pointer-events: none;
+}
+.cr-badge:hover .rim, .cr-badge:focus-visible .rim, .cr-badge.match .rim {
+  stroke: var(--sem-action); filter: drop-shadow(0 0 10px rgba(255, 122, 26, 0.45));
+}
+.cr-badge:hover .gl, .cr-badge:focus-visible .gl, .cr-badge.match .gl { fill: var(--sem-action); }
+.cr-badge:hover .cap-label, .cr-badge:focus-visible .cap-label, .cr-badge.match .cap-label { fill: var(--ink); }
+.cr-badge:focus-visible { outline: none; }
+/* Search attenuates the ring in place; matches keep their position (§19). */
+.ring-svg.searching .cr-badge:not(.match) { opacity: 0.18; }
+.ring-svg.searching #cr-atmo, .ring-svg.searching #cr-deco { opacity: 0.3; }
+.ring-svg.searching #cr-core { opacity: 0.35; }
+
+/* ---- the core ------------------------------------------------------------ */
+.cr-core { cursor: pointer; }
+.cr-core .core-hex  { fill: none; stroke: rgba(255, 122, 26, 0.26); stroke-width: 1.2; }
+.cr-core .core-ring { fill: none; stroke: rgba(255, 122, 26, 0.5); stroke-width: 1.6; transition: stroke 160ms, filter 160ms; }
+.cr-core .core-disc { fill: rgba(9, 7, 5, 0.94); stroke: rgba(255, 122, 26, 0.3); stroke-width: 1; }
+.cr-core .core-mark line   { stroke: var(--sem-action); stroke-width: 2.4; }
+.cr-core .core-mark .f     { fill: var(--sem-action); }
+.cr-core .core-mark .o     { fill: none; stroke: var(--sem-action); stroke-width: 2.4; }
+.cr-core .core-name {
+  fill: var(--ink); font: 650 15px var(--font-ui); letter-spacing: 0.2em;
+  text-anchor: middle; pointer-events: none;
+}
+.cr-core .core-count {
+  fill: var(--ink-faint); font: 500 9.5px var(--font-mono); letter-spacing: 0.11em;
+  text-anchor: middle; pointer-events: none;
+}
+.cr-core:hover .core-ring, .cr-core:focus-visible .core-ring {
+  stroke: var(--sem-action); filter: drop-shadow(0 0 22px rgba(255, 122, 26, 0.55));
+}
+.cr-core:focus-visible { outline: none; }
+.cr-core:focus-visible .core-hex { stroke: var(--focus); }
+/* The affordance: named, and visually secondary to the core it describes. */
+.core-hint {
+  fill: var(--ink-ghost); font: 600 10px var(--font-ui); letter-spacing: 0.22em;
+  text-anchor: middle; pointer-events: none; transition: fill 160ms;
+}
+.core-hint-rule { stroke: rgba(255, 255, 255, 0.07); stroke-width: 1; }
+#cr-core:hover ~ .core-hint, .os-field:hover .core-hint { fill: var(--ink-faint); }
+
+/* ---- Second Brain: the place's own bar ---------------------------------- */
+.brain-bar {
+  position: absolute; top: 0; left: 0; right: 0; z-index: 14;
+  display: flex; align-items: center; gap: var(--s4);
+  padding: 12px 18px; pointer-events: auto;
+}
+.backbtn {
+  font: 600 9px/1 var(--font-ui); letter-spacing: 0.16em; text-transform: uppercase;
+  color: var(--sem-action); background: rgba(255, 122, 26, 0.06);
+  border: 1px solid rgba(255, 122, 26, 0.42); border-radius: 999px;
+  padding: 7px 13px; cursor: pointer; white-space: nowrap;
+  transition: background 130ms, border-color 130ms;
+}
+.backbtn:hover { background: rgba(255, 122, 26, 0.15); border-color: var(--sem-action); }
+.brain-title { display: flex; flex-direction: column; gap: 1px; }
+.brain-title .name { font: 650 11px/1 var(--font-ui); letter-spacing: 0.2em; color: var(--ink); }
+.brain-title .sub { color: var(--ink-ghost); }
+.brain-meta { margin-left: auto; font-size: 8.5px; letter-spacing: 0.08em; color: var(--ink-ghost); }
+.field-wrap.hud-hidden .brain-meta { display: none; }
+.field-wrap .field-readout.tl { top: 46px; }
+.gctl { top: 52px; }
+
+/* ---- Second Brain: ring structure --------------------------------------- */
+.br-bound { fill: none; stroke: rgba(255, 255, 255, 0.07); stroke-width: 1; stroke-dasharray: 2 11; vector-effect: non-scaling-stroke; }
+.br-tick  { stroke: rgba(255, 255, 255, 0.07); stroke-width: 1; vector-effect: non-scaling-stroke; }
+.br-tick.long { stroke: rgba(255, 255, 255, 0.16); }
+.br-track { fill: none; stroke-width: 0.9; vector-effect: non-scaling-stroke; }
+.br-track.sem-action   { stroke: rgba(255, 122, 26, 0.2); stroke-dasharray: 3 5; }
+.br-track.sem-domain   { stroke: rgba(55, 182, 217, 0.17); }
+.br-track.sem-memory   { stroke: rgba(169, 127, 224, 0.11); }
+.br-spoke  { stroke: rgba(255, 255, 255, 0.035); stroke-width: 0.6; vector-effect: non-scaling-stroke; }
+.br-radial { stroke: rgba(255, 255, 255, 0.05); stroke-width: 0.6; vector-effect: non-scaling-stroke; }
+.br-anno { pointer-events: none; }
+.br-anno .rl {
+  font: 600 calc(8px / var(--zoom, 1)) var(--font-ui); letter-spacing: 0.18em;
+  fill: var(--ink-ghost);
+  paint-order: stroke; stroke: #000; stroke-width: calc(3px / var(--zoom, 1)); stroke-linejoin: round;
+}
+.br-anno .rn {
+  font: 500 calc(8px / var(--zoom, 1)) var(--font-mono); letter-spacing: 0.06em;
+  fill: var(--ink-ghost); opacity: 0.66;
+  paint-order: stroke; stroke: #000; stroke-width: calc(3px / var(--zoom, 1)); stroke-linejoin: round;
+}
+.br-anno.sem-action .rl { fill: rgba(255, 122, 26, 0.6); }
+.br-anno.sem-domain .rl { fill: rgba(55, 182, 217, 0.6); }
+.br-anno.sem-memory .rl { fill: rgba(169, 127, 224, 0.55); }
+
+/* Inner ring: real capabilities. Never graph objects — no id, no search hit,
+   no inspector. Activating one runs the capability. */
+.br-cap { cursor: pointer; }
+.br-cap .bg  { fill: rgba(10, 7, 5, 0.92); }
+.br-cap .rim { fill: none; stroke: rgba(255, 122, 26, 0.42); stroke-width: 1.1; transition: stroke 130ms; }
+.br-cap .gl  {
+  fill: var(--sem-action); font-family: var(--font-ui);
+  font-size: calc(11px / var(--zoom, 1)); text-anchor: middle; pointer-events: none;
+}
+.br-cap .cl {
+  fill: var(--ink-ghost); font: 600 calc(7px / var(--zoom, 1)) var(--font-ui);
+  letter-spacing: 0.14em; text-anchor: middle; pointer-events: none;
+  paint-order: stroke; stroke: #000; stroke-width: calc(2.5px / var(--zoom, 1)); stroke-linejoin: round;
+}
+.br-cap:hover .rim, .br-cap:focus-visible .rim {
+  stroke: var(--sem-action); filter: drop-shadow(0 0 8px rgba(255, 122, 26, 0.5));
+}
+.br-cap:hover .cl, .br-cap:focus-visible .cl { fill: var(--ink-dim); }
+.br-cap:focus-visible { outline: none; }
+.field-svg.searching #g-caps { opacity: 0.25; }
+
+/* ---- semantic ring colour on real objects -------------------------------
+   Reinforcement only: the class is already stated by the node's label, the
+   ring annotation it sits on, and the inspector's type line (§4.13). */
+.gnode[data-sem="domain"] .disc { stroke: var(--sem-domain); }
+.gnode[data-sem="domain"] .lbl  { fill: #9fd3e6; }
+.gnode[data-sem="memory"] .dot  { fill: rgba(169, 127, 224, 0.2); stroke: rgba(169, 127, 224, 0.55); }
+.gnode[data-sem="temporal"] .dot { fill: rgba(245, 181, 61, 0.2); stroke: rgba(245, 181, 61, 0.6); }
+.gnode[data-sem="action"] .coremark { stroke: var(--sem-action); }
+.gnode[data-sem="action"] .coremark.dotc { fill: var(--sem-action); }
+.gnode[data-sem="action"] .core-label { fill: rgba(255, 145, 71, 0.85); }
+/* Focus still wins over class: the selection is the one lit thing (§2.6). */
+.gnode.hov .disc, .gnode.sel .disc { stroke: var(--sem-action); }
+
+/* =============================================================================
+   LEFT RAIL — Micro Apps · Calendar + Time (IST) · Project Pulse · Members
+   ========================================================================== */
+.clock .t { font-size: 26px; }
+.clock-z { display: flex; align-items: baseline; justify-content: space-between; margin-top: 3px; }
+.clock-z .z { font: 600 8px/1 var(--font-ui); letter-spacing: 0.16em; color: var(--ink-faint); }
+.clock-z .z.sec { letter-spacing: 0.05em; color: var(--ink-ghost); }
+.wk { margin: 0 0 var(--s2); }
+
+/* Squares carry time — the reference's shape type system (§15). */
+.calmatrix { display: grid; grid-template-columns: repeat(7, 1fr); gap: 3px; margin-top: var(--s3); }
+.calmatrix i {
+  aspect-ratio: 1; display: grid; place-items: center; font-style: normal;
+  font: 500 8px/1 var(--font-mono); color: var(--ink-ghost);
+  border: 1px solid transparent; border-radius: 1px;
+}
+.calmatrix i.hd { font-size: 7px; opacity: 0.5; letter-spacing: 0.06em; }
+.calmatrix i.d { border-color: var(--hair); color: var(--ink-faint); }
+.calmatrix i.d.past { background: rgba(255, 255, 255, 0.05); color: var(--ink-ghost); }
+.calmatrix i.d.now { background: var(--sem-action); border-color: var(--sem-action); color: #180a02; font-weight: 600; }
+.label.yl { margin-top: var(--s3); }
+.qgrid { grid-template-columns: repeat(13, 1fr); }
+
+.team { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; }
+.tm-row {
+  display: grid; grid-template-columns: 18px 1fr auto; gap: var(--s2);
+  align-items: center; padding: 5px 0; border-top: 1px solid var(--hair-faint);
+}
+.tm-row:first-child { border-top: none; }
+.tm-chip {
+  width: 18px; height: 18px; border-radius: 50%; border: 1px solid var(--hair-2);
+  display: grid; place-items: center; font: 600 8px/1 var(--font-ui); color: var(--ink-faint);
+}
+.tm-name { color: var(--ink-dim); font-size: 11px; }
+.tm-you { color: var(--ink-ghost); }
+.tm-row.me .tm-chip { border-color: rgba(255, 122, 26, 0.5); color: var(--sem-action); }
+.tm-row.me .tm-name { color: var(--ink); }
+
+/* =============================================================================
+   RIGHT RAIL — Email (preview) · Skills Deck (real) · Routines (preview)
+   ========================================================================== */
+.hero-count { display: flex; align-items: baseline; gap: var(--s3); margin-bottom: var(--s3); }
+.hero-count .metric { font-size: 34px; }
+.hero-count .metric.off { color: var(--ink-ghost); }
+.hc-l { display: flex; flex-direction: column; gap: 1px; }
+.label.sub { color: var(--ink-ghost); }
+
+.msg-list { list-style: none; margin: 6px 0 var(--s4); padding: 0; }
+.msg {
+  display: grid; grid-template-columns: 12px 1fr auto; gap: var(--s2);
+  align-items: center; padding: 6px 0; border-top: 1px solid var(--hair-faint);
+}
+.msg:first-child { border-top: none; }
+.msg .ic { color: var(--ink-ghost); font-size: 9px; text-align: center; }
+.msg .t  { color: var(--ink-dim); font-size: 10.5px; }
+.msg .tm { color: var(--ink-ghost); font: 500 9px/1 var(--font-mono); }
+.msg.empty .t, .msg.empty .tm, .msg.empty .ic { opacity: 0.5; }
+
+.mixbar { display: grid; grid-template-columns: repeat(6, 1fr); gap: 3px; margin-top: 6px; }
+.mixbar i { height: 6px; background: rgba(255, 255, 255, 0.045); border: 1px solid var(--hair-faint); }
+
+/* Elevation is reserved for runnable things: a Skills card is a pressable
+   object, so it — and nothing else in the rails — is raised (§15). */
+.skill { box-shadow: 0 8px 20px -16px #000; }
+.skill .run {
+  width: 15px; height: 15px; border-radius: 50%; display: grid; place-items: center;
+  border: 1px solid rgba(255, 122, 26, 0.45); font-size: 7px; align-self: start;
+}
+.skill.click:hover .run, .skill.click:focus-visible .run {
+  background: rgba(255, 122, 26, 0.16); border-color: var(--sem-action);
+}
+
+/* Routines is a structure with no engine behind it: the rows are empty, and
+   the section says so in words as well as in state. */
+.ttable.routines tbody tr.ghost { cursor: default; opacity: 0.4; }
+.ttable.routines tbody tr.ghost:hover .cx { color: var(--ink-dim); }
+
+/* =============================================================================
+   RESPONSIVE — the ring survives every width (§22)
+   ========================================================================== */
+@media (max-width: 1200px) {
+  .brain-bar { padding: 10px 12px; gap: var(--s3); }
+  .brain-title .sub { display: none; }
+  .os-readout.tl, .os-readout.tr { font-size: 8px; }
+}
+
+@media (max-width: 720px) {
+  /* A vertical command sequence, not a scaled-down desktop: the core and its
+     ring stay first and stay identifiable, then the surfaces in rail order. */
+  .center { position: relative; }
+  .os-field, .field-wrap { position: static; transform: none !important; }
+  body[data-view="os"] .field-wrap,
+  body[data-view="brain"] .os-field { display: none; }
+  body[data-view="os"] .field-wrap { opacity: 1; visibility: visible; }
+  body[data-view="brain"] .os-field { opacity: 1; visibility: visible; }
+  .ring-svg { position: static; width: 100%; height: 96vw; }
+  .os-readout { display: none; }
+  .brain-bar { position: static; padding: var(--s3) var(--s3) 0; }
+  .brain-meta { display: none; }
+  .field-wrap .field-readout.tl { display: none; }
+  .gctl { top: auto; }
+  .center > .spotlight { top: 6px; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .os-field, .field-wrap { transition: none !important; }
+}
+
+/* The temporal grids are compact instruments, not blocks: cap their width so a
+   wide rail does not inflate a 7- or 13-column matrix into a wall of squares. */
+.calmatrix, .qgrid { max-width: 210px; }
+.calmatrix i { font-size: 7.5px; }
+
+/* ---- the Second Brain is a PLACE, so it takes the whole canvas -----------
+   Entering it is a change of location, not a panel opening beside the rails.
+   The way back is always on screen and named. */
+body[data-view="brain"] .shell {
+  grid-template-columns: minmax(0, 1fr);
+  grid-template-areas: "header" "center";
+}
+body[data-view="brain"] .rail { display: none; }
+body[data-view="brain"] .rail-toggle { visibility: hidden; }
+
+/* Ambient bloom is atmosphere, not a light source: keep it under the ring
+   structure rather than washing it out. */
+.core-bloom { opacity: 0.075; }
+.center.inspecting .core-bloom { opacity: 0.095; }
+.cr-bloom { opacity: 0.085; }
+
+/* The ring tracks carry the structure — they have to be legible as rings, not
+   merely inferable from where the nodes happen to sit. */
+.br-track.sem-action { stroke: rgba(255, 122, 26, 0.3); }
+.br-track.sem-domain { stroke: rgba(55, 182, 217, 0.26); }
+.br-track.sem-memory { stroke: rgba(169, 127, 224, 0.18); }
+.br-bound { stroke: rgba(255, 255, 255, 0.13); }
+.br-tick  { stroke: rgba(255, 255, 255, 0.1); }
+.br-tick.long { stroke: rgba(255, 255, 255, 0.24); }
+.br-spoke { stroke: rgba(255, 255, 255, 0.05); }
+/* The map's own identity readout duplicates the bar above it. */
+body[data-view="brain"] .field-wrap .field-readout.tl { display: none; }
+
+/* ---- header: the reference's two-tone wordmark, given real presence ------
+   Still one row, still four controls, still no navigation — only weighted so
+   the product names itself as clearly as the reference does. */
+:root { --header-h: 64px; }
+.brand { gap: 2px; }
+.brand .brand-line { gap: 9px; }
+.brand .mark { width: 17px; height: 17px; }
+.brand .name { font: 650 17px/1 var(--font-ui); letter-spacing: 0.14em; color: var(--ink); }
+.brand .sub {
+  font: 400 16px/1 var(--font-ui); letter-spacing: 0.02em;
+  text-transform: none; color: var(--sem-action);
+}
+.brand .brand-id { font: 500 9.5px/1 var(--font-ui); letter-spacing: 0.1em; color: var(--ink-faint); text-transform: none; }
+.header .tools { gap: 6px; margin-top: 2px; }
+.header .tools .iconbtn { width: 22px; height: 20px; font-size: 12px; }
+
+/* The outer geometry has to be visible for the composition to read to its full
+   extent — it is the enclosure the ring sits inside. */
+.cr-bound { stroke: rgba(255, 255, 255, 0.11); }
+.cr-tick  { stroke: rgba(255, 255, 255, 0.14); }
+.cr-tick.long { stroke: rgba(255, 255, 255, 0.28); }
+.cr-marker { stroke: rgba(255, 255, 255, 0.12); }
+.cr-hair   { stroke: rgba(255, 255, 255, 0.06); }
+.cr-guide  { stroke: rgba(255, 255, 255, 0.05); }

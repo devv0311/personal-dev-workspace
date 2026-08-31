@@ -105,3 +105,22 @@ export interface AuditWriter {
     },
   ): Promise<void>;
 }
+
+/**
+ * Workspace membership, read-only (T3.2).
+ *
+ * The people surface shows exactly what the model records about a person —
+ * their workspace membership and the display name on their principal row —
+ * and nothing else. There is no e-mail, no avatar, no role, no external
+ * account and no per-person activity in the schema, so none is returned here
+ * and none can be rendered downstream.
+ */
+export interface MemberRepository {
+  /** Principals who are members of the caller's own workspace. */
+  listMembers(scope: ResolvedScope): Promise<WorkspaceMember[]>;
+}
+
+export interface WorkspaceMember {
+  readonly id: string;
+  readonly displayName: string;
+}

@@ -142,11 +142,19 @@ test('relationships are represented as the real edges they are', async () => {
   assert.ok(ref.relationshipId, 'a stored edge carries its row id');
 
   // Structural containment restates object.workspace_id — labelled as such.
-  const structural = graph.edges.filter((e) => e.origin === 'structural');
+  // Selected by the column it restates, not by `origin`: every computed edge is
+  // origin 'structural' (the synthesised home-project anchor included, T3.2-R1
+  // / F3), so origin alone no longer distinguishes workspace containment.
+  const structural = graph.edges.filter((e) => e.provenance.kind === 'structural:workspace');
   assert.equal(structural.length, 2, 'one per top-level object (the two projects)');
   for (const e of structural) {
+    assert.equal(e.origin, 'structural');
     assert.equal(e.to, IDS.workspace);
-    assert.equal(e.provenance.kind, 'structural:workspace');
+  }
+
+  // No computed edge may claim authorship, whichever column it restates.
+  for (const e of graph.edges.filter((x) => x.synthesised)) {
+    assert.equal(e.origin, 'structural', `computed edge ${e.id} must not claim explicit origin`);
   }
 
   // No decorative edges: every edge restates a column or a row.

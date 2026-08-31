@@ -16,6 +16,24 @@ export const SEED = {
   noteSeed: '00000000-0000-4000-8000-000000000100',
 } as const;
 
+/**
+ * The real project group (T3.2 §13).
+ *
+ * A principal row plus a workspace membership is the whole of what the model
+ * records about a person, so it is the whole of what is seeded: a display name
+ * and the fact of membership. No e-mail, avatar, external account, role,
+ * permission, contribution or activity is fabricated for any of them — the
+ * schema has no column for those, and the people surface must not imply
+ * otherwise.
+ */
+export const GROUP_MEMBERS: ReadonlyArray<readonly [string, string, string]> = [
+  ['00000000-0000-4000-8000-0000000000d1', 'Dev', 'dev:dev'],
+  ['00000000-0000-4000-8000-0000000000d2', 'Sanchit', 'dev:sanchit'],
+  ['00000000-0000-4000-8000-0000000000d3', 'Shourya', 'dev:shourya'],
+  ['00000000-0000-4000-8000-0000000000d4', 'Aatika', 'dev:aatika'],
+  ['00000000-0000-4000-8000-0000000000d5', 'Ananya', 'dev:ananya'],
+] as const;
+
 const SEED_PROJECT = {
   api: SEED.projectApi,
   private: SEED.projectPrivate,
@@ -75,6 +93,20 @@ export async function seed(): Promise<void> {
       [SEED.alice, 'Alice', 'dev:alice'],
       [SEED.bob, 'Bob', 'dev:bob'],
     ] as const) {
+      await client.query(
+        `INSERT INTO principal (id, workspace_id, auth_subject, display_name)
+         VALUES ($1, $2, $3, $4) ON CONFLICT (id) DO NOTHING`,
+        [id, SEED.workspaceId, subject, name],
+      );
+      await client.query(
+        `INSERT INTO workspace_membership (workspace_id, principal_id)
+         VALUES ($1, $2) ON CONFLICT DO NOTHING`,
+        [SEED.workspaceId, id],
+      );
+    }
+
+    // The real project group. Membership only — see GROUP_MEMBERS.
+    for (const [id, name, subject] of GROUP_MEMBERS) {
       await client.query(
         `INSERT INTO principal (id, workspace_id, auth_subject, display_name)
          VALUES ($1, $2, $3, $4) ON CONFLICT (id) DO NOTHING`,

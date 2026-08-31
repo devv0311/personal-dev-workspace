@@ -71,6 +71,15 @@ interface HomeRow {
 /**
  * The synthesised `belongs_to` edge derived from object.home_project_id
  * (P2.6 §8.2). One builder, used by every read, so the two forms cannot drift.
+ *
+ * `origin` is **`structural`**, never `explicit`: this edge is computed on read
+ * from a column, it was never authored by anyone, and it is not a stored row
+ * (blueprint §5.3 — origin is `explicit` | `user_confirmed` | `structural`,
+ * where structural means "computed on read, never stored"). Claiming `explicit`
+ * would assert user authorship for a derivation and contradict the STRUCTURAL
+ * state the inspector shows for the same edge; §5.8/§5.9 require provenance to
+ * be truthful, not merely present. `authorId` stays null for the same reason,
+ * and `provenance.kind` names the exact column the edge was computed from.
  */
 function homeRowToEdge(h: HomeRow): RelationshipEdge {
   return {
@@ -79,7 +88,7 @@ function homeRowToEdge(h: HomeRow): RelationshipEdge {
     fromObjectId: asObjectId(h.object_id),
     toObjectId: asObjectId(h.project_id),
     verb: 'belongs_to',
-    origin: 'explicit',
+    origin: 'structural',
     confidenceState: 'known',
     authorId: null,
     visibilityScope: 'shared',

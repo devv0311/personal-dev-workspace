@@ -3,7 +3,7 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>Personal Developer Workspace</title>
+    <title>DEVWORKSPACE — Context OS</title>
     <link
       rel="icon"
       href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Crect width='24' height='24' fill='%23000'/%3E%3Cline x1='7' y1='17' x2='17' y2='7' stroke='%23ff7a1a' stroke-width='2'/%3E%3Ccircle cx='7' cy='17' r='3.4' fill='%23ff7a1a'/%3E%3Ccircle cx='17' cy='7' r='3.4' fill='none' stroke='%23ff7a1a' stroke-width='2'/%3E%3C/svg%3E"
@@ -16,31 +16,40 @@
     />
     <link rel="stylesheet" href="/styles.css" />
   </head>
-  <body>
+  <body data-view="os">
     <a class="skip-link" href="#g-search">Skip to context search</a>
 
     <div class="shell">
-      <!-- ===== HEADER — compact, framing, not a navbar ===== -->
+      <!-- ===== HEADER — restrained, technical, centred identity ===== -->
       <header class="header">
         <div class="h-left">
           <button class="iconbtn rail-toggle" id="toggle-left" aria-label="Toggle left rail">☰</button>
+          <span class="wsctx" id="wsctx" aria-live="polite">
+            <span class="label k">Workspace</span>
+            <span class="mono v" id="wsctx-v">—</span>
+          </span>
         </div>
 
         <div class="brand">
-          <svg class="mark" viewBox="0 0 24 24" aria-hidden="true">
-            <line x1="7" y1="17" x2="17" y2="7" stroke="currentColor" stroke-width="1.6" />
-            <circle cx="7" cy="17" r="3.2" fill="currentColor" />
-            <circle cx="17" cy="7" r="3.2" fill="none" stroke="currentColor" stroke-width="1.6" />
-          </svg>
-          <span class="name">DEV<b>WORKSPACE</b></span>
-          <span class="sub" id="brand-sub">persistent context layer</span>
+          <span class="brand-line">
+            <svg class="mark" viewBox="0 0 24 24" aria-hidden="true">
+              <line x1="7" y1="17" x2="17" y2="7" stroke="currentColor" stroke-width="1.6" />
+              <circle cx="7" cy="17" r="3.2" fill="currentColor" />
+              <circle cx="17" cy="7" r="3.2" fill="none" stroke="currentColor" stroke-width="1.6" />
+            </svg>
+            <span class="name">DEVWORKSPACE</span>
+            <span class="sub" id="brand-sub">Context OS</span>
+          </span>
+          <span class="brand-id" id="brand-id">—</span>
           <span class="tools">
-            <button class="iconbtn" id="t-search" aria-label="Search context">⌕</button>
+            <button class="iconbtn" id="t-search" aria-label="Search the workspace">⌕</button>
+            <button class="iconbtn" id="t-brain" aria-label="Open the Second Brain" aria-pressed="false">◎</button>
+            <button class="iconbtn" id="t-reset" aria-label="Reset the view">⊹</button>
+            <button class="iconbtn" id="t-help" aria-label="Toggle field readouts" aria-pressed="true">ⓘ</button>
           </span>
         </div>
 
         <div class="h-right">
-          <button class="pill ghost" id="p-graph" aria-label="Reset graph view">Graph</button>
           <select class="principal-select" id="principal" aria-label="Development principal">
             <option value="">…</option>
           </select>
@@ -50,85 +59,160 @@
       </header>
 
       <!-- ===== LEFT RAIL — what you reach for ===== -->
-      <aside class="rail left" aria-label="Left intelligence rail">
-        <section class="sect" aria-labelledby="s-actions">
-          <header><span class="glyph" aria-hidden="true">⌘</span><span class="label" id="s-actions">Actions</span></header>
+      <aside class="rail left" aria-label="Left command rail">
+        <!-- MICRO APPS — developer workflow surfaces this build actually has.
+             No integration is listed that does not exist. -->
+        <section class="sect" aria-labelledby="s-apps">
+          <header><span class="glyph" aria-hidden="true">▦</span><span class="label" id="s-apps">Micro Apps</span></header>
           <div class="tool click" id="tool-capture" role="button" tabindex="0">
-            <span class="ic" aria-hidden="true">⌘</span>
+            <span class="ic" aria-hidden="true">＋</span>
             <span><span class="nm">Capture</span><br /><span class="ds">Save context into a project instantly</span></span>
+            <span class="ar" aria-hidden="true">→</span>
+          </div>
+          <div class="tool click" id="tool-brain" role="button" tabindex="0">
+            <span class="ic" aria-hidden="true">◎</span>
+            <span><span class="nm">Second Brain</span><br /><span class="ds">Your whole workspace as a living map</span></span>
             <span class="ar" aria-hidden="true">→</span>
           </div>
           <div class="tool click" id="tool-ask" role="button" tabindex="0">
             <span class="ic" aria-hidden="true">✧</span>
-            <span><span class="nm">Ask</span><br /><span class="ds">Question your context, grounded in real objects</span></span>
+            <span><span class="nm">Ask Context</span><br /><span class="ds">Question your context, grounded in real objects</span></span>
+            <span class="ar" aria-hidden="true">→</span>
+          </div>
+          <div class="tool click" id="tool-search" role="button" tabindex="0">
+            <span class="ic" aria-hidden="true">⌕</span>
+            <span><span class="nm">Spatial Search</span><br /><span class="ds">Find any object without losing where it sits</span></span>
             <span class="ar" aria-hidden="true">→</span>
           </div>
         </section>
 
-        <section class="sect" aria-labelledby="s-session">
+        <!-- CALENDAR + TIME — the user's own timezone (IST · India), ticking
+             every second. Everything here is computed from the device clock;
+             no schedule is claimed, because no calendar is connected. -->
+        <section class="sect" aria-labelledby="s-cal">
           <header>
-            <span class="glyph" aria-hidden="true">▣</span><span class="label" id="s-session">Session</span>
+            <span class="glyph" aria-hidden="true">▢</span><span class="label" id="s-cal">Calendar</span>
+            <span class="meta note" id="cal-today">—</span>
           </header>
-          <div class="clock"><span class="t mono" id="clock">--:--:--</span><span class="z">AEST · SYDNEY</span></div>
-          <div class="wk mono" id="wk">WK34 · AUG 2026</div>
-          <div class="tz-row">
-            <span class="tz"><span class="k">USA PT</span><span class="v" id="tz-pt">—</span></span>
-            <span class="tz"><span class="k">USA ET</span><span class="v" id="tz-et">—</span></span>
-            <span class="tz"><span class="k">LONDON</span><span class="v" id="tz-ln">—</span></span>
+          <div class="wk mono" id="wk">—</div>
+          <div class="clock">
+            <span class="t mono" id="clock">--:--:-- --</span>
           </div>
-          <div class="qgrid" id="qgrid" aria-hidden="true" title="Progress through today"></div>
+          <div class="clock-z"><span class="z">IST · INDIA</span><span class="z sec mono" id="clock-utc">—</span></div>
+          <div class="calmatrix" id="calmatrix" aria-hidden="true"></div>
+          <div class="label yl">Year</div>
+          <div class="qgrid" id="qgrid" aria-hidden="true" title="Weeks elapsed this year"></div>
         </section>
 
-        <!-- Project Pulse — a projection of the same object the graph and
-             inspector hold (P3.3). Captures / activity are real; "Open tasks"
-             and "Blocked" have no backing domain object yet, so the section
-             stays PREVIEW-tagged. -->
+        <!-- PROJECT PULSE — what exists, what is active, what changed.
+             Every number is derived from the loaded graph; the activity rows
+             and dots are real captured objects and open the same object. -->
         <section class="sect" aria-labelledby="s-pulse">
           <header>
             <span class="glyph" aria-hidden="true">◭</span><span class="label" id="s-pulse">Project Pulse</span>
-            <span class="meta tag preview">Preview</span>
+            <span class="meta note" id="pulse-note">—</span>
           </header>
           <div class="pulse-name" id="pulse-name">No project selected</div>
           <div class="pulse-metrics">
+            <span class="pm"><span class="n real" id="pulse-projects">0</span><span class="l label">Projects</span></span>
             <span class="pm"><span class="n real" id="pulse-captures">0</span><span class="l label">Captures</span></span>
-            <span class="pm"><span class="n" id="pulse-open">7</span><span class="l label">Open tasks</span></span>
-            <span class="pm"><span class="n" id="pulse-blocked">3</span><span class="l label">Blocked</span></span>
+            <span class="pm"><span class="n real" id="pulse-links">0</span><span class="l label">Links</span></span>
           </div>
           <div class="label" style="margin-top: var(--s4)">Context activity</div>
-          <div class="actgrid" id="actgrid" role="list" aria-label="Recent captured context — activates the same object in the graph"></div>
+          <div class="actgrid" id="actgrid" role="list" aria-label="Recent captured context — opens the same object in the Second Brain"></div>
+          <table class="ttable activity" aria-label="Recently captured context">
+            <thead><tr><th>Time</th><th>Context</th><th>State</th></tr></thead>
+            <tbody id="act-rows"></tbody>
+          </table>
+          <p class="rail-quiet" id="act-empty" hidden>No context captured yet.</p>
+        </section>
+
+        <!-- WORKSPACE MEMBERS — principal display names and workspace
+             membership, read from /api/workspace/members. That is the whole of
+             what the model records about a person: there is no e-mail, avatar,
+             role, external account or per-person activity in the schema, so
+             none is shown and none is inferred (T3.2 §13). -->
+        <section class="sect" aria-labelledby="s-team">
+          <header>
+            <span class="glyph" aria-hidden="true">◍</span><span class="label" id="s-team">Workspace Members</span>
+            <span class="meta note" id="team-note">—</span>
+          </header>
+          <ul class="team" id="team-list"></ul>
+          <p class="rail-quiet">
+            Names and workspace membership only — the model records nothing else
+            about a person.
+          </p>
         </section>
       </aside>
 
-      <!-- ===== CENTRE — the Context Field: the developer's real workspace
-           objects and the real relationships between them (§5) ===== -->
+      <!-- ===== CENTRE ===== -->
       <main class="center" id="center">
-        <div class="field-wrap">
+        <!-- ---------- OS COMMAND VIEW: ring + core ---------- -->
+        <div class="os-field" id="os-field">
+          <svg class="ring-svg" id="osvg" viewBox="0 0 1000 1000" preserveAspectRatio="xMidYMid meet"
+               role="group"
+               aria-label="Command centre. A ring of the workspace's capabilities around its core. Activate the core to open the Second Brain.">
+            <defs>
+              <filter id="cr-soft" x="-80%" y="-80%" width="260%" height="260%">
+                <feGaussianBlur stdDeviation="58" />
+              </filter>
+            </defs>
+            <circle class="cr-bloom" cx="500" cy="500" r="230" filter="url(#cr-soft)" aria-hidden="true" />
+            <g id="cr-atmo" aria-hidden="true"></g>
+            <g id="cr-deco" aria-hidden="true"></g>
+            <g id="cr-ring"></g>
+            <g id="cr-core"></g>
+          </svg>
+          <div class="os-readout tl" id="os-tl">DEVWORKSPACE · COMMAND CENTRE</div>
+          <div class="os-readout tr" id="os-tr">—</div>
+        </div>
+
+        <!-- ---------- SECOND BRAIN: a place, not a panel ---------- -->
+        <div class="field-wrap" id="brain-field">
+          <div class="brain-bar">
+            <button class="backbtn" id="brain-back">← BACK TO DEVWORKSPACE</button>
+            <span class="brain-title">
+              <span class="name">SECOND BRAIN</span>
+              <span class="sub label">Concentric context map</span>
+            </span>
+            <span class="brain-meta mono" id="brain-meta">—</span>
+          </div>
+
           <svg class="field-svg" id="fsvg" viewBox="0 0 1000 1000" preserveAspectRatio="xMidYMid meet"
-               role="application" aria-roledescription="Interactive context graph"
-               aria-label="Context graph. The workspace, its projects and their captured context, drawn from what you can see. Drag to pan, scroll to zoom, click a node to inspect it. Use the search field in the graph controls for keyboard access to any node.">
+               role="application" aria-roledescription="Second Brain — concentric context map"
+               aria-label="The workspace as concentric rings: capabilities, projects and the context captured into them. Drag to pan, scroll to zoom, click a node to inspect it. Use the search field in the graph controls for keyboard access to any node.">
             <defs>
               <pattern id="grid" width="46" height="46" patternUnits="userSpaceOnUse">
                 <circle class="gridbg" cx="2" cy="2" r="0.9" />
               </pattern>
+              <filter id="soft" x="-80%" y="-80%" width="260%" height="260%">
+                <feGaussianBlur stdDeviation="52" />
+              </filter>
             </defs>
             <rect class="hexfill" x="-500" y="-500" width="2000" height="2000" fill="url(#grid)" />
             <!-- one transform on #viewport carries all pan/zoom -->
             <g id="viewport">
+              <!-- Ring structure and particle field: NON-DATA texture plus ring
+                   annotations whose names and counts come from the payload. -->
+              <circle id="core-bloom" class="core-bloom" cx="500" cy="500" r="230" filter="url(#soft)" aria-hidden="true" />
+              <g id="g-atmosphere" aria-hidden="true"></g>
               <g id="g-edges"></g>
+              <!-- inner ring: real capabilities, never graph objects -->
+              <g id="g-caps"></g>
+              <!-- verb + direction labels, only for the selection's revealed edges -->
+              <g id="g-edgelabels"></g>
               <g id="g-nodes"></g>
             </g>
           </svg>
 
           <div class="field-readout tl" id="ro-tl">WORKSPACE</div>
-          <div class="node-tip" id="node-tip" hidden></div>
 
-          <!-- graph control panel — only controls the graph actually supports;
-               one deterministic layout, no projection or physics controls. -->
-          <section class="gctl" id="gctl" aria-label="Graph controls">
+          <!-- graph control panel — only controls the map actually supports -->
+          <section class="gctl folded" id="gctl" aria-label="Second Brain controls">
             <header>
-              <span class="label">Context Graph</span>
+              <span class="label">Map Controls</span>
               <span class="mono ct" id="ro-tr">0 / 0</span>
-              <button class="iconbtn" id="gctl-toggle" aria-expanded="true" aria-label="Collapse graph controls">▾</button>
+              <button class="iconbtn" id="gctl-toggle" aria-expanded="false" aria-label="Expand map controls">▸</button>
             </header>
             <div class="gbody" id="gctl-body">
               <div class="srch">
@@ -160,54 +244,19 @@
             </div>
           </section>
 
-          <!-- Assistant panel (P3.4, pre-existing on this branch). T3.1 did not
-               build or remove it; it carries the conformed token system. Every
-               evidence row is a real object id that selects and focuses the
-               graph node. -->
-          <section class="askp" id="askp" aria-label="Ask your context" hidden>
-            <header>
-              <span class="label">Ask Context</span>
-              <span class="mono ct" id="ask-provider">—</span>
-              <button class="iconbtn close" id="ask-close" aria-label="Close assistant">✕</button>
-            </header>
-            <div class="askbody">
-              <form class="askform" id="ask-form" autocomplete="off">
-                <div class="askscope mono" id="ask-scope">Whole workspace</div>
-                <textarea id="ask-input" rows="2" placeholder="Why did we choose this? · What was I working on? · Summarize this · Extract tasks"
-                          aria-label="Ask a question about your context"></textarea>
-                <div class="askactions">
-                  <button type="submit" class="btn-run" id="ask-submit">Ask</button>
-                  <button type="button" class="pill ghost sm" id="ask-summarize">Summarize</button>
-                  <button type="button" class="pill ghost sm" id="ask-extract">Extract tasks</button>
-                  <span id="ask-status" role="status" aria-live="polite"></span>
-                </div>
-              </form>
-
-              <div class="askout" id="ask-out" hidden>
-                <div class="askgrounding" id="ask-grounding"></div>
-                <p class="askanswer" id="ask-answer"></p>
-
-                <div class="label" id="ask-ev-label" hidden>Evidence · click to open in graph</div>
-                <ul class="evlist" id="ask-evidence"></ul>
-
-                <div class="label" id="ask-task-label" hidden>Proposed tasks · review before creating</div>
-                <ul class="tasklist" id="ask-tasks"></ul>
-              </div>
-            </div>
-          </section>
-
-          <div class="legend-pill" aria-label="Graph legend">
-            <span class="li"><span class="sw a"></span>Workspace</span>
-            <span class="li"><span class="sw b"></span>Project</span>
-            <span class="li"><span class="sw c"></span>Context</span>
+          <div class="legend-pill" aria-label="Ring legend">
+            <span class="li"><span class="sw sem-action"></span>Capability</span>
+            <span class="li"><span class="sw sem-domain"></span>Project</span>
+            <span class="li"><span class="sw sem-memory"></span>Context</span>
+            <span class="li"><span class="sw sem-temporal"></span>Task</span>
           </div>
 
           <div class="field-empty" id="field-empty" hidden>
             <span class="big">No context nodes</span>
-            <span>Capture something into a project to populate the graph.</span>
+            <span>Capture something into a project to populate the map.</span>
           </div>
 
-          <!-- Context Inspector: identity, actions, and content/relationships
+          <!-- Context Inspector: identity, actions, relationships and capture
                on distinct surfaces; real persisted data for the selected node. -->
           <div class="inspector" id="inspector">
             <div class="ibar">
@@ -225,6 +274,15 @@
                 <span class="mono" id="ins-id">—</span>
               </div>
               <div class="meta-row mono" id="ins-meta"></div>
+
+              <!-- Reason-giving. Every line is derived from a real field and
+                   names the evidence; inferred lines are marked and hedged. -->
+              <div class="label">Why this matters</div>
+              <div class="why" id="ins-why">
+                <p class="why-sum" id="why-sum"></p>
+                <ul class="why-list" id="why-list"></ul>
+              </div>
+
               <p class="ins-body" id="ins-body" hidden></p>
               <div class="label" id="ins-children-label" hidden>Captured context</div>
               <ol class="ctx-list" id="ctx-list"></ol>
@@ -250,42 +308,147 @@
             </div>
           </div>
         </div>
+
+        <!-- shared across both places -->
+        <div class="node-tip" id="node-tip" hidden></div>
+
+        <!-- Spatial search: a compact centred field. Typing attenuates the
+             whole surface and lights matches in place — they never reflow. -->
+        <div class="spotlight" id="spotlight" hidden>
+          <div class="sl-in">
+            <span class="ic" aria-hidden="true">⌕</span>
+            <input id="sl-input" type="search" autocomplete="off" placeholder="Search the workspace…"
+                   aria-label="Search the workspace" aria-controls="sl-results" />
+            <button class="iconbtn close" id="sl-close" aria-label="Close search">✕</button>
+          </div>
+          <ul class="sl-results" id="sl-results" role="listbox" aria-label="Search matches" hidden></ul>
+        </div>
+
+        <!-- Assistant panel (P3.4). Every evidence row is a real object id
+             that selects and focuses the same node in the Second Brain. -->
+        <section class="askp" id="askp" aria-label="Ask your context" hidden>
+          <header>
+            <span class="label">Ask Context</span>
+            <span class="mono ct" id="ask-provider">—</span>
+            <button class="iconbtn close" id="ask-close" aria-label="Close assistant">✕</button>
+          </header>
+          <div class="askbody">
+            <form class="askform" id="ask-form" autocomplete="off">
+              <div class="askscope mono" id="ask-scope">Whole workspace</div>
+              <textarea id="ask-input" rows="2" placeholder="Why did we choose this? · What was I working on? · Summarize this · Extract tasks"
+                        aria-label="Ask a question about your context"></textarea>
+              <div class="askactions">
+                <button type="submit" class="btn-run" id="ask-submit">Ask</button>
+                <button type="button" class="pill ghost sm" id="ask-summarize">Summarize</button>
+                <button type="button" class="pill ghost sm" id="ask-extract">Extract tasks</button>
+                <span id="ask-status" role="status" aria-live="polite"></span>
+              </div>
+            </form>
+
+            <div class="askout" id="ask-out" hidden>
+              <div class="askgrounding" id="ask-grounding"></div>
+              <p class="askanswer" id="ask-answer"></p>
+
+              <div class="label" id="ask-ev-label" hidden>Evidence · click to open in the map</div>
+              <ul class="evlist" id="ask-evidence"></ul>
+
+              <div class="label" id="ask-task-label" hidden>Proposed tasks · review before creating</div>
+              <ul class="tasklist" id="ask-tasks"></ul>
+            </div>
+          </div>
+        </section>
       </main>
 
       <!-- ===== RIGHT RAIL — what wants you ===== -->
-      <aside class="rail right" aria-label="Right intelligence rail">
-        <!-- Classified C (P3.3): every row here needs a backend capability this
-             MVP does not build — GitHub activity, decision-conflict detection,
-             task tracking — so none resolves to a real persisted object. Kept as
-             clearly PREVIEW-tagged content rather than fabricating a linkage;
-             the region is intentionally quiet. -->
-        <section class="sect" aria-labelledby="s-attn">
+      <aside class="rail right" aria-label="Right command rail">
+        <!-- EMAIL — the reference's inbound-demand module. DEVWORKSPACE has no
+             mail integration, so the surface is present and the state is
+             stated: nothing is counted, nothing is listed, and no message,
+             sender or timestamp is invented (T3.2 §7, §23). -->
+        <section class="sect" aria-labelledby="s-email">
           <header>
-            <span class="glyph" aria-hidden="true">▲</span><span class="label" id="s-attn">Attention</span>
-            <span class="meta tag preview">Preview</span>
+            <span class="glyph" aria-hidden="true">✉</span><span class="label" id="s-email">Email</span>
+            <span class="meta tag offline">Not connected</span>
           </header>
-          <div class="attn-count"><span class="metric" id="attn-n">12</span><span class="label">Items need review</span></div>
-          <div class="attn-row">
-            <span class="ic" aria-hidden="true">⚡</span>
-            <span><span class="t">PR #184 — authentication</span><br /><span class="m">auth-service · needs review</span></span>
-            <span class="tm">18m</span>
+          <div class="hero-count">
+            <span class="metric off" id="email-n">—</span>
+            <span class="hc-l"><span class="label">Emails</span><span class="label sub">Past 24h</span></span>
           </div>
-          <div class="attn-row">
-            <span class="ic" aria-hidden="true">◉</span>
-            <span><span class="t">Decision conflict detected</span><br /><span class="m">database persistence approach</span></span>
-            <span class="tm">2h</span>
-          </div>
-          <div class="attn-row">
-            <span class="ic" aria-hidden="true">◆</span>
-            <span><span class="t">3 tasks blocked</span><br /><span class="m">payment-service</span></span>
-            <span class="tm">4h</span>
+          <div class="label">Flagged · needs you</div>
+          <ul class="msg-list" aria-label="Flagged messages — none, no provider connected">
+            <li class="msg empty"><span class="ic" aria-hidden="true">▫</span><span class="t">—</span><span class="tm">—</span></li>
+            <li class="msg empty"><span class="ic" aria-hidden="true">▫</span><span class="t">—</span><span class="tm">—</span></li>
+            <li class="msg empty"><span class="ic" aria-hidden="true">▫</span><span class="t">—</span><span class="tm">—</span></li>
+          </ul>
+          <div class="label">Today's mix</div>
+          <div class="mixbar" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i><i></i></div>
+          <p class="rail-quiet">
+            Preview surface. No mail provider is connected to this workspace, so
+            no count, message or timestamp is shown.
+          </p>
+        </section>
+
+        <!-- SKILLS DECK — the reference's runnable-command cards, carrying only
+             capabilities the product actually has. The meta line shows the
+             assistant's REAL provider when its /healthz answers, and says
+             `offline` when it does not. No model or effort badge is ever
+             invented (T3.2 §8). -->
+        <section class="sect" aria-labelledby="s-skills">
+          <header>
+            <span class="glyph" aria-hidden="true">⌁</span><span class="label" id="s-skills">Skills Deck</span>
+            <span class="meta note">tap ▶ to run</span>
+          </header>
+          <p class="sect-note" id="flow-scope">Scope · whole workspace</p>
+          <div class="deck">
+            <div class="skill click" id="flow-capture" role="button" tabindex="0">
+              <span class="cmd mono">/capture</span>
+              <span class="run" aria-hidden="true">▶</span>
+              <span class="sd">Save a note into the focused project</span>
+              <span class="sk-meta mono">core · workspace</span>
+            </div>
+            <div class="skill click" id="flow-ask" role="button" tabindex="0">
+              <span class="cmd mono">/ask</span>
+              <span class="run" aria-hidden="true">▶</span>
+              <span class="sd">Answer from your context, grounded in real objects</span>
+              <span class="sk-meta mono" data-assistant>assistant · …</span>
+            </div>
+            <div class="skill click" id="flow-summarize" role="button" tabindex="0">
+              <span class="cmd mono">/summarize</span>
+              <span class="run" aria-hidden="true">▶</span>
+              <span class="sd">Condense the current scope</span>
+              <span class="sk-meta mono" data-assistant>assistant · …</span>
+            </div>
+            <div class="skill click" id="flow-extract" role="button" tabindex="0">
+              <span class="cmd mono">/extract-tasks</span>
+              <span class="run" aria-hidden="true">▶</span>
+              <span class="sd">Pull action items from the current scope</span>
+              <span class="sk-meta mono" data-assistant>assistant · …</span>
+            </div>
           </div>
         </section>
 
-        <p class="rail-quiet">
-          Nothing else is waiting on you. When GitHub activity, decision
-          conflicts and task tracking are connected, they surface here.
-        </p>
+        <!-- ROUTINES — the reference's temporal schedule module. DEVWORKSPACE
+             has no scheduler: nothing runs on a clock, so no routine, no fire
+             time and no run history is shown. The table structure is present;
+             its state is OFFLINE and its rows are empty (T3.2 §9, §23). -->
+        <section class="sect" aria-labelledby="s-routines">
+          <header>
+            <span class="glyph" aria-hidden="true">◷</span><span class="label" id="s-routines">Routines</span>
+            <span class="meta tag offline">Offline</span>
+          </header>
+          <table class="ttable routines" aria-label="Scheduled routines — none, no automation engine connected">
+            <thead><tr><th>Time</th><th>Routine</th><th>Status</th></tr></thead>
+            <tbody>
+              <tr class="ghost"><td class="t mono">--:--</td><td class="cx">—</td><td class="st">—</td></tr>
+              <tr class="ghost"><td class="t mono">--:--</td><td class="cx">—</td><td class="st">—</td></tr>
+              <tr class="ghost"><td class="t mono">--:--</td><td class="cx">—</td><td class="st">—</td></tr>
+            </tbody>
+          </table>
+          <p class="rail-quiet">
+            Preview surface. No automation engine is connected, so nothing is
+            scheduled and no run has happened.
+          </p>
+        </section>
       </aside>
     </div>
 

@@ -335,6 +335,210 @@ export function recentActivity(graph, node = null, detail = null, limit = 20) {
   return { items: sorted.slice(0, limit), total: sorted.length };
 }
 
+/* ------------------------------------------------- why it matters (T3.2) --- */
+//
+// Reason-giving (blueprint §5.9, §2 item 5). The requirement is that a user can
+// ask "why does this matter / why is it here?" and get a concrete answer — and
+// that the system NEVER presents an inference as a plain fact.
+//
+// So this is deliberately NOT a generated explanation. Every clause below is
+// derived from a field that already exists on the object or the edge, and each
+// carries the evidence it was derived from. Nothing is invented, nothing is
+// scored, and no model is called: an LLM-written rationale would be exactly the
+// "false certainty" P2.2 §4 forbids. The assistant (P3.4) remains the place
+// where generated language lives, clearly labelled as such.
+
+/** How a confidence state should be spoken about. Text, never colour alone. */
+export const CONFIDENCE_LABEL = {
+  known: 'Known',
+  user_confirmed: 'Confirmed',
+  inferred_high: 'Inferred',
+  weak: 'Possible',
+  structural: 'Structural',
+};
+
+/** True when a reason rests on inference rather than a recorded fact. */
+const isInferred = (state) => state === 'inferred_high' || state === 'weak';
+
+const MONTHS = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+/** `2026-08-29T…` → `29 Aug 2026`. Deterministic, so the reason text is testable. */
+function readableDate(iso) {
+  const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(String(iso ?? ''));
+  if (!m) return String(iso ?? '');
+  return `${Number(m[3])} ${MONTHS[Number(m[2]) - 1]} ${m[1]}`;
+}
+
+/**
+ * Name the far end of a relationship **truthfully**, and keep three states that
+ * the product must never conflate (§5.8 provenance, §8.3 data authenticity):
+ *
+ *   `titled`    — the object resolved and has a title. Use it.
+ *   `untitled`  — the object resolved and IS visible; it simply carries no
+ *                 title (a body-only capture is legitimate: "title optional if
+ *                 body set"). We state the identity we actually hold — its
+ *                 class and its real id — and never a name we invented, never
+ *                 its body text passed off as a name, and never a claim about
+ *                 visibility that is not true.
+ *   `unresolved`— the server returned no object for this endpoint, so it is
+ *                 genuinely outside what this principal may see. Only this case
+ *                 may say so.
+ *
+ * One helper, used by both the "why this matters" derivation and the
+ * relationship rows, so the two surfaces cannot describe the same edge
+ * differently — which is exactly the defect this replaces.
+ */
+export function endpointIdentity(other) {
+  if (!other) {
+    return { text: 'An object outside your visibility', state: 'unresolved', resolved: false };
+  }
+  const title = typeof other.title === 'string' ? other.title.trim() : '';
+  if (title) return { text: title, state: 'titled', resolved: true };
+  const meta = TYPE_META[other.type];
+  const cls = meta ? meta.label : 'Object';
+  const ref = String(other.id ?? '').slice(0, 8);
+  return {
+    text: ref ? `Untitled ${cls.toLowerCase()} · ${ref}` : `Untitled ${cls.toLowerCase()}`,
+    state: 'untitled',
+    resolved: true,
+  };
+}
+
+/**
+ * Explain why the selected object is where it is and what it is connected to.
+ *
+ * Returns `{ summary, reasons }` where every reason is:
+ *   { kind, text, evidence, inferred }
+ * `evidence` names the real field or row the clause came from, so any statement
+ * on screen can be traced back. `inferred` marks the ones that must be hedged.
+ *
+ * `detail` is the /api/objects/:id payload (object + edges + children). With no
+ * detail this still explains what the graph payload alone supports.
+ */
+export function explainObject(node, detail = null, graph = null) {
+  if (!node) return { summary: '', reasons: [] };
+  const reasons = [];
+  const add = (kind, text, evidence, inferred = false) =>
+    reasons.push({ kind, text, evidence, inferred });
+
+  const meta = metaFor(node.type);
+  const nodes = graph?.nodes ?? [];
+  const titleOf = (id) => nodes.find((n) => n.id === id)?.title ?? null;
+
+  // --- what it is -----------------------------------------------------------
+  if (node.kind === 'workspace') {
+    const projects = nodes.filter((n) => n.type === 'project').length;
+    const captures = nodes.filter((n) => n.layer === 'memory').length;
+    add(
+      'identity',
+      `The root of your workspace: ${projects} project${projects === 1 ? '' : 's'} and ` +
+        `${captures} captured item${captures === 1 ? '' : 's'} hang off it.`,
+      'graph payload',
+    );
+    return { summary: 'Everything you can see is contained here.', reasons };
+  }
+
+  add('identity', `A ${meta.label.toLowerCase()} in your workspace.`, 'object.type');
+
+  // --- where it sits --------------------------------------------------------
+  if (node.type === 'project') {
+    const kids = detail?.children?.length ?? nodes.filter((n) => n.homeProjectId === node.id).length;
+    add(
+      'containment',
+      `A project holding ${kids} captured item${kids === 1 ? '' : 's'}.`,
+      'object.home_project_id of its context',
+    );
+  } else if (node.homeProjectId) {
+    const home = titleOf(node.homeProjectId) ?? detail?.object?.homeProjectId ?? 'its project';
+    add('containment', `Captured into ${home}.`, 'object.home_project_id');
+  } else {
+    add(
+      'containment',
+      'Not filed into a project yet — it sits in the Inbox.',
+      'object.home_project_id is null',
+    );
+  }
+
+  // --- who and when ---------------------------------------------------------
+  const created = detail?.object?.createdAt ?? node.createdAt;
+  if (created) add('provenance', `Captured ${readableDate(created)}.`, 'object.created_at');
+  const via = detail?.object?.attributes?.createdVia;
+  if (via === 'assistant_proposal') {
+    add(
+      'provenance',
+      'Created by you from an assistant proposal — the text was suggested, the decision to keep it was yours.',
+      'object.attributes.createdVia',
+    );
+  }
+
+  // --- what it connects to --------------------------------------------------
+  // Individually, never as a count-only summary (§5.3).
+  const edges = detail?.edges ?? [];
+  for (const row of edges) {
+    const state = row.edge?.synthesised ? 'structural' : row.edge?.confidenceState;
+    if (state === 'weak') continue; // never in primary context (P2.2 §4)
+    // Truthful identity for the far end — an untitled object is NOT an object
+    // the reader cannot see, and must not be described as one (§8.3).
+    const other = endpointIdentity(row.other).text;
+    const dir = row.direction === 'out' ? '' : 'is the target of ';
+    const label = CONFIDENCE_LABEL[state] ?? state;
+    const inferred = isInferred(state);
+    add(
+      'relationship',
+      inferred
+        ? `Appears related: ${dir}${row.edge.verb} → ${other} (inferred — not confirmed).`
+        : `${dir}${row.edge.verb} → ${other}. (${label})`,
+      row.edge?.synthesised
+        ? `computed from ${row.edge.provenance?.kind ?? 'a structural column'}`
+        : `relationship row ${String(row.edge?.relationshipId ?? '').slice(0, 8)}`,
+      inferred,
+    );
+  }
+
+  const strong = reasons.filter((r) => r.kind === 'relationship' && !r.inferred).length;
+  const summary = strong
+    ? `Connected to ${strong} other ${strong === 1 ? 'object' : 'objects'} in your workspace.`
+    : 'Nothing links to this yet.';
+
+  return { summary, reasons };
+}
+
+/**
+ * Group a selected node's revealed relationships by what a label on the field
+ * would actually *say*: its verb and its direction relative to the selection.
+ *
+ * A project with ten captures reveals ten `belongs_to` edges pointing at it.
+ * Drawing ten identical `← belongs_to` labels states one fact ten times and
+ * — measured at 1600×900 — collapses into an unreadable pile that also covers
+ * the project's own name. One group means one label.
+ *
+ * This is a **labelling** concern, not a data one: every edge stays in its
+ * group and every relationship remains individually listed, with verb,
+ * direction, confidence and provenance, in the inspector (§5.3 forbids
+ * collapsing relationships into aggregate counts — no count is produced here).
+ *
+ * Ordered so the labels that carry the most information are placed first:
+ * authored verbs before purely structural ones, then larger fans before
+ * smaller, because a fan's label is the one covering the most edges.
+ */
+export function revealedLabelGroups(edges, selectedId) {
+  const groups = new Map();
+  for (const e of edges ?? []) {
+    if (!e || (e.from !== selectedId && e.to !== selectedId)) continue;
+    const outgoing = e.from === selectedId;
+    const key = `${outgoing ? 'out' : 'in'}|${e.verb}`;
+    let g = groups.get(key);
+    if (!g) groups.set(key, (g = { key, outgoing, verb: e.verb, structural: true, edges: [] }));
+    if (!e.synthesised) g.structural = false;
+    g.edges.push(e);
+  }
+  return [...groups.values()].sort(
+    (p, q) => Number(p.structural) - Number(q.structural) || q.edges.length - p.edges.length,
+  );
+}
+
+/** The words a group's label carries — direction arrow plus the real verb. */
+export const labelTextFor = (group) => `${group.outgoing ? '→ ' : '← '}${group.verb}`;
+
 /* ------------------------------------------------------------------ focus -- */
 
 export const clampZoom = (k) => Math.min(ZOOM.MAX, Math.max(ZOOM.MIN, k));
@@ -381,4 +585,251 @@ export function zoomAbout(transform, factor, anchor) {
     tx: anchor.x - (anchor.x - transform.tx) * scale,
     ty: anchor.y - (anchor.y - transform.ty) * scale,
   };
+}
+
+/* ============================================================================
+   T3.2 — RING SYSTEM (pure)
+
+   Two ring compositions share this module so the OS command centre and the
+   Second Brain cannot disagree about geometry or about what a ring means:
+
+     • the COMMAND RING — the workspace's real, invocable capabilities laid on
+       one track around the core;
+     • the SECOND BRAIN — concentric rings over the SAME objects the graph,
+       the inspector, search and the rails already hold.
+
+   Nothing here invents an object. `CAPABILITIES` names capabilities the
+   product actually has and each one points at a handler the shell already
+   wires; the ring layouts only place real payload nodes.
+   ========================================================================== */
+
+/**
+ * The workspace's real capabilities. Each entry maps to a handler that already
+ * exists in the shell — the capture form, the P3.4 assistant and its summarize
+ * / extract actions, the graph's own relationship reveal, and spatial search.
+ * Nothing is listed here that the product cannot do; the ring is sized by this
+ * list, never padded to match the reference's badge count.
+ */
+export const CAPABILITIES = [
+  {
+    id: 'capture',
+    command: '/capture',
+    label: 'Capture',
+    glyph: '＋',
+    description: 'Save a note into the focused project',
+    kind: 'core',
+  },
+  {
+    id: 'ask',
+    command: '/ask',
+    label: 'Ask',
+    glyph: '✧',
+    description: 'Answer from your context, grounded in real objects',
+    kind: 'assistant',
+  },
+  {
+    id: 'summarize',
+    command: '/summarize',
+    label: 'Summarize',
+    glyph: '≡',
+    description: 'Condense the current scope',
+    kind: 'assistant',
+  },
+  {
+    id: 'extract',
+    command: '/extract-tasks',
+    label: 'Extract Tasks',
+    glyph: '☑',
+    description: 'Pull action items from the current scope',
+    kind: 'assistant',
+  },
+  {
+    id: 'connect',
+    command: 'connect',
+    label: 'Connect',
+    glyph: '⁘',
+    description: 'Reveal what the selected object touches',
+    kind: 'core',
+  },
+  {
+    id: 'search',
+    command: 'search',
+    label: 'Search',
+    glyph: '⌕',
+    description: 'Find any object without losing its place',
+    kind: 'core',
+  },
+];
+
+/**
+ * Semantic ring colour classes (T3.2 §6). Colour REINFORCES a class that is
+ * always also stated in words — the node's own label, the ring annotation and
+ * the inspector all name it — so nothing depends on hue alone (§4.13).
+ *
+ *   action   → the core and its capabilities      (orange)
+ *   domain   → projects: the workspace's domains  (cyan)
+ *   temporal → tasks: dated, actionable work      (amber)
+ *   memory   → captured context                   (purple)
+ */
+export const SEMANTIC_BY_TYPE = {
+  workspace: 'action',
+  project: 'domain',
+  task: 'temporal',
+  note: 'memory',
+  idea: 'memory',
+  decision: 'memory',
+  resource: 'memory',
+  checkpoint: 'memory',
+};
+
+export const semanticClassOf = (node) =>
+  node?.kind === 'workspace' ? 'action' : (SEMANTIC_BY_TYPE[node?.type] ?? 'memory');
+
+/**
+ * Second Brain geometry. Radii are in the same 1000×1000 user space the graph
+ * already uses, so the two views share one coordinate system.
+ */
+export const BRAIN_GEO = {
+  CX: 500,
+  CY: 500,
+  R_CAP: 140, // capability ring (drawn by the view, not a payload node)
+  R_INBOX: 196, // objects with no home project
+  R_DOMAIN: 252, // projects — the context / domain ring
+  R_MEM: 320, // first memory ring
+  MEM_STEP: 40,
+  MEM_RINGS: 3,
+  R_BOUND: 436, // outer system boundary
+  START: -Math.PI / 2,
+  SECTOR: 0.86, // fraction of a project's angular share its context may use
+};
+
+/** Evenly spaced points on one ring. Shared by both ring compositions. */
+export function ringPoints(count, radius, { cx = 500, cy = 500, start = -Math.PI / 2 } = {}) {
+  const out = [];
+  for (let i = 0; i < count; i++) {
+    const angle = start + (i / Math.max(count, 1)) * Math.PI * 2;
+    out.push({
+      index: i,
+      angle,
+      radius,
+      x: cx + Math.cos(angle) * radius,
+      y: cy + Math.sin(angle) * radius,
+    });
+  }
+  return out;
+}
+
+/**
+ * Concentric-ring projection of the SAME graph payload the wedge layout draws.
+ *
+ *   CORE          the workspace root
+ *   DOMAIN RING   projects, evenly spaced
+ *   MEMORY RINGS  each project's captured context, filling outward inside that
+ *                 project's own angular sector, ring by ring
+ *   INBOX RING    context with no home project, on a tight inner ring
+ *
+ * Deterministic: same payload ⇒ same positions, so nothing reshuffles between
+ * renders, and a node keeps its place while search attenuates around it.
+ */
+export function layoutSecondBrain(graph, index = buildIndex(graph)) {
+  const pos = new Map();
+  const { CX, CY, R_INBOX, R_DOMAIN, R_MEM, MEM_STEP, MEM_RINGS, START, SECTOR } = BRAIN_GEO;
+
+  if (index.rootId) pos.set(index.rootId, { x: CX, y: CY, r: 30, angle: 0, radius: 0, band: 'core' });
+
+  const projects = [...index.nodes.values()]
+    .filter((n) => n.type === 'project')
+    .sort(
+      (a, b) => String(a.createdAt).localeCompare(String(b.createdAt)) || a.id.localeCompare(b.id),
+    );
+
+  const share = (Math.PI * 2) / Math.max(projects.length, 1);
+  projects.forEach((p, i) => {
+    // Offset by half a sector so the 12 o'clock radial is a sector BOUNDARY,
+    // never a project. That keeps one clear gutter for the ring annotations.
+    const angle = START + (i + 0.5) * share;
+    pos.set(p.id, {
+      x: CX + Math.cos(angle) * R_DOMAIN,
+      y: CY + Math.sin(angle) * R_DOMAIN,
+      r: metaFor('project').r,
+      angle,
+      radius: R_DOMAIN,
+      band: 'domain',
+    });
+
+    const kids = (index.childrenOf.get(p.id) ?? [])
+      .filter((id) => index.nodes.get(id)?.type !== 'project')
+      .sort((a, b) => {
+        const na = index.nodes.get(a);
+        const nb = index.nodes.get(b);
+        return String(na.createdAt).localeCompare(String(nb.createdAt)) || a.localeCompare(b);
+      });
+
+    // Fill ring by ring, so an outer ring is only reached once the ones inside
+    // it are full — the reference's "rings fill outward" reading.
+    const perRing = Math.max(3, Math.ceil(kids.length / MEM_RINGS));
+    kids.forEach((id, k) => {
+      const ring = Math.floor(k / perRing);
+      const slot = k % perRing;
+      const inRing = Math.min(perRing, kids.length - ring * perRing);
+      const spread = share * SECTOR;
+      const a = angle + ((slot + 0.5) / inRing - 0.5) * spread;
+      const radius = R_MEM + ring * MEM_STEP + (hash01(id) - 0.5) * 6;
+      pos.set(id, {
+        x: CX + Math.cos(a) * radius,
+        y: CY + Math.sin(a) * radius,
+        r: metaFor(index.nodes.get(id).type).r,
+        angle: a,
+        radius,
+        band: 'memory',
+      });
+    });
+  });
+
+  const orphans = (index.childrenOf.get(index.rootId) ?? []).filter(
+    (id) => index.nodes.get(id)?.type !== 'project' && !pos.has(id),
+  );
+  orphans.forEach((id, i) => {
+    const a = START + ((i + 0.5) / Math.max(orphans.length, 1)) * Math.PI * 2;
+    pos.set(id, {
+      x: CX + Math.cos(a) * R_INBOX,
+      y: CY + Math.sin(a) * R_INBOX,
+      r: metaFor(index.nodes.get(id).type).r,
+      angle: a,
+      radius: R_INBOX,
+      band: 'inbox',
+    });
+  });
+
+  return pos;
+}
+
+/**
+ * The ring structure to annotate, derived from what the payload actually
+ * contains. A ring the workspace has nothing on is reported with a zero count
+ * rather than being hidden or filled — the map states its own emptiness.
+ */
+export function brainRings(graph, index = buildIndex(graph)) {
+  const { R_CAP, R_INBOX, R_DOMAIN, R_MEM, MEM_STEP, R_BOUND } = BRAIN_GEO;
+  const nodes = [...index.nodes.values()];
+  const count = (fn) => nodes.filter(fn).length;
+  const memory = count((n) => n.layer === 'memory' && n.homeProjectId);
+  const inbox = count((n) => n.kind !== 'workspace' && !n.homeProjectId && n.type !== 'project');
+  const memRings = Math.max(
+    1,
+    Math.ceil(memory / Math.max(1, count((n) => n.type === 'project') * 3)),
+  );
+  return [
+    { key: 'capability', label: 'Capabilities', radius: R_CAP, count: CAPABILITIES.length, semantic: 'action' },
+    { key: 'inbox', label: 'Inbox', radius: R_INBOX, count: inbox, semantic: 'memory' },
+    { key: 'domain', label: 'Projects', radius: R_DOMAIN, count: count((n) => n.type === 'project'), semantic: 'domain' },
+    ...Array.from({ length: Math.min(BRAIN_GEO.MEM_RINGS, memRings) }, (_, i) => ({
+      key: `memory-${i}`,
+      label: i === 0 ? 'Context' : '',
+      radius: R_MEM + i * MEM_STEP,
+      count: i === 0 ? memory : 0,
+      semantic: 'memory',
+    })),
+    { key: 'boundary', label: 'System boundary', radius: R_BOUND, count: nodes.length, semantic: 'boundary' },
+  ];
 }
