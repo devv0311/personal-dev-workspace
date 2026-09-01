@@ -117,22 +117,54 @@ export interface AuditWriter {
 }
 
 /**
- * Workspace membership, read-only (T3.2).
+ * Workspace membership, read-only (T3.2; headship added at T3.3-CORRECTION).
  *
  * The people surface shows exactly what the model records about a person —
- * their workspace membership and the display name on their principal row —
- * and nothing else. There is no e-mail, no avatar, no role, no external
- * account and no per-person activity in the schema, so none is returned here
- * and none can be rendered downstream.
+ * their workspace membership, the display name on their principal row, and now
+ * their membership ROLE, which is a real column. There is still no e-mail, no
+ * avatar, no permission tier, no external account and no per-person activity in
+ * the schema, so none is returned here and none can be rendered downstream.
  */
 export interface MemberRepository {
-  /** Principals who are members of the caller's own workspace. */
+  /** Principals who are members of the caller's own workspace, head first. */
   listMembers(scope: ResolvedScope): Promise<WorkspaceMember[]>;
+  /**
+   * The workspace itself, and the member who heads it.
+   *
+   * `head` is null when no membership carries the `owner` role — which is a
+   * real state of the data and is rendered as an absence, never as a guess at
+   * who is probably in charge.
+   */
+  readWorkspace(scope: ResolvedScope): Promise<WorkspaceIdentity | null>;
 }
+
+/** A membership role. `owner` is the workspace head; there is at most one. */
+export type MemberRole = 'owner' | 'member';
 
 export interface WorkspaceMember {
   readonly id: string;
   readonly displayName: string;
+  readonly role: MemberRole;
+}
+
+export interface WorkspaceIdentity {
+  readonly id: string;
+  readonly name: string;
+  readonly head: WorkspaceMember | null;
+}
+
+/**
+ * Per-principal read state for artifacts (T3.3-CORRECTION).
+ *
+ * Read/unread is personal: one member opening an artifact must not mark it read
+ * for anyone else, so the key is (principal, artifact ref) and there is no
+ * unscoped write. The ref is the artifact's own stable identity, so the state
+ * survives a refetch of the source that produced it.
+ */
+export interface ArtifactReadRepository {
+  /** Which of `refs` this principal has already opened. */
+  readRefs(scope: ResolvedScope, refs: readonly string[]): Promise<Set<string>>;
+  markRead(scope: ResolvedScope, ref: string): Promise<void>;
 }
 
 /**

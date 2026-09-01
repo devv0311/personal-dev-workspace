@@ -26,10 +26,13 @@ import {
   endpointIdentity,
   revealedLabelGroups,
   labelTextFor,
-  BRAIN_GEO,
-  CAPABILITIES,
-  brainRings,
-  layoutSecondBrain,
+  SECTOR_GEO,
+  SKILLS,
+  UNFILED_SECTOR,
+  layoutSectorTree,
+  sectorsOf,
+  sectorIndexOf,
+  sectorFocusSet,
   ringPoints,
   semanticClassOf,
 } from '../src/adapters/web/graph-model.js';
@@ -631,20 +634,24 @@ test('a selection with no relationships produces no labels at all', () => {
    fabricated members to make a circle look full.
    ========================================================================== */
 
-test('the capability ring is the product\'s real capabilities, not a padded circle', () => {
+test('the skills ring is the product\'s real, runnable skills — not a padded circle', () => {
   // Every entry has to be a thing the shell can actually run. The count is
   // whatever that list is — the ring is never grown to match a reference.
-  assert.ok(CAPABILITIES.length > 0);
-  const ids = CAPABILITIES.map((c) => c.id);
-  assert.equal(new Set(ids).size, ids.length, 'no duplicate capability fills a slot');
-  for (const c of CAPABILITIES) {
+  assert.ok(SKILLS.length > 0);
+  const ids = SKILLS.map((c) => c.id);
+  assert.equal(new Set(ids).size, ids.length, 'no duplicate skill fills a slot');
+  for (const c of SKILLS) {
     assert.ok(c.id && c.label && c.command && c.description, `${c.id} is fully specified`);
+    assert.ok(c.engine === 'core' || c.engine === 'assistant', `${c.id} names a real engine`);
     assert.ok(!/fake|demo|placeholder|lorem/i.test(`${c.label} ${c.command} ${c.description}`));
   }
-  // The four assistant/capture commands the Skills Deck runs are all present.
-  for (const cmd of ['/capture', '/ask', '/summarize', '/extract-tasks']) {
-    assert.ok(CAPABILITIES.some((c) => c.command === cmd), `${cmd} is on the ring`);
-  }
+  // Exactly the four commands the Skills Deck runs, and nothing else. The two
+  // that used to pad the ring — Connect (the map's own selection gesture) and
+  // Search (the spotlight) — are NOT skills and must not reappear here.
+  assert.deepEqual(
+    SKILLS.map((c) => c.command).sort(),
+    ['/ask', '/capture', '/extract-tasks', '/summarize'],
+  );
 });
 
 test('ringPoints spaces a ring evenly and deterministically', () => {
@@ -666,89 +673,181 @@ test('semantic class follows the real object type, and the root is the core', ()
   assert.equal(semanticClassOf(node('D', 'decision', 'D')), 'memory');
 });
 
-test('the Second Brain lays the same objects out as concentric rings', () => {
-  const g = fixture();
-  const pos = layoutSecondBrain(g);
+/* ============================================================================
+   T3.3-CORRECTION — THE RADIAL SECTOR TREE
 
-  // Every real node is placed, and only real nodes are placed: the capability
-  // ring is drawn by the view and never enters the layout as a pseudo-object.
+   The old geometry was concentric rings BY DATA TYPE. What these tests pin is
+   the property that replaced it: the layout states HIERARCHY. A project owns an
+   angular sector; its context lives inside that sector and nowhere else; and
+   focusing a project lights its branch and only its branch.
+   ========================================================================== */
+
+test('the tree is a hub, one sector per real project, and context on its own ray', () => {
+  const g = fixture();
+  const pos = layoutSectorTree(g);
+
+  // Every real node is placed, and ONLY real nodes are placed: skills are drawn
+  // by the view and never enter the layout as pseudo-objects.
   assert.deepEqual([...pos.keys()].sort(), g.nodes.map((n) => n.id).sort());
 
-  const core = pos.get('W');
-  assert.deepEqual({ x: core.x, y: core.y }, { x: BRAIN_GEO.CX, y: BRAIN_GEO.CY });
-  assert.equal(core.band, 'core');
+  const hub = pos.get('W');
+  assert.deepEqual({ x: hub.x, y: hub.y }, { x: SECTOR_GEO.CX, y: SECTOR_GEO.CY });
+  assert.equal(hub.band, 'core');
+  assert.equal(hub.sectorId, null, 'the hub belongs to no sector');
 
   for (const id of ['P1', 'P2']) {
-    assert.equal(pos.get(id).band, 'domain');
-    assert.ok(Math.abs(pos.get(id).radius - BRAIN_GEO.R_DOMAIN) < 1e-9, `${id} on the domain ring`);
+    assert.equal(pos.get(id).band, 'project');
+    assert.equal(pos.get(id).sectorId, id, 'a project heads its own sector');
+    assert.ok(Math.abs(pos.get(id).radius - SECTOR_GEO.R_PROJECT) < 1e-9);
   }
-  for (const id of ['N1', 'N2', 'N3', 'N4']) {
-    assert.equal(pos.get(id).band, 'memory');
-    assert.ok(pos.get(id).radius >= BRAIN_GEO.R_MEM - 4, `${id} is outside the domain ring`);
+  for (const [id, parent] of [['N1', 'P1'], ['N2', 'P1'], ['N3', 'P2'], ['N4', 'P2']]) {
+    assert.equal(pos.get(id).band, 'context');
+    assert.equal(pos.get(id).sectorId, parent, `${id} is in ${parent}'s sector`);
+    assert.ok(pos.get(id).radius >= SECTOR_GEO.R_CTX - 4, `${id} is outside the project ring`);
   }
 });
 
-test('Second Brain context stays inside its own project\'s sector', () => {
+test('sectors are contiguous, non-overlapping, and cover the circle exactly once', () => {
+  for (const count of [1, 2, 3, 5, 8]) {
+    const nodes = [node('W', 'workspace', 'Workspace')];
+    for (let i = 0; i < count; i++) nodes.push(node(`P${i}`, 'project', `P${i}`, null, { day: i + 1 }));
+    const sectors = sectorsOf({ nodes, edges: [] });
+    assert.equal(sectors.length, count);
+    const share = (Math.PI * 2) / count;
+    for (let i = 0; i < count; i++) {
+      const sc = sectors[i];
+      assert.ok(Math.abs(sc.share - share) < 1e-9, 'every project gets an equal share');
+      // Its own ray is the middle of its span, so context fans symmetrically.
+      assert.ok(Math.abs(sc.angle - (sc.start + sc.end) / 2) < 1e-9);
+      // Contiguous: this sector begins exactly where the previous one ended.
+      if (i > 0) assert.ok(Math.abs(sc.start - sectors[i - 1].end) < 1e-9);
+    }
+    assert.ok(Math.abs(sectors[count - 1].end - sectors[0].start - Math.PI * 2) < 1e-9);
+  }
+});
+
+test('context stays inside its own project\'s sector, never scattered around a ring', () => {
   const g = fixture();
-  const pos = layoutSecondBrain(g);
-  const half = (Math.PI / 2) * BRAIN_GEO.SECTOR; // half a sector, two projects
-  for (const [projectId, kids] of [
-    ['P1', ['N1', 'N2']],
-    ['P2', ['N3', 'N4']],
-  ]) {
-    const base = pos.get(projectId).angle;
-    for (const kid of kids) {
-      const delta = Math.abs(((pos.get(kid).angle - base + Math.PI) % (Math.PI * 2)) - Math.PI);
-      assert.ok(delta <= half + 1e-6, `${kid} is inside ${projectId}'s sector`);
+  const pos = layoutSectorTree(g);
+  for (const sector of sectorsOf(g)) {
+    const half = (sector.share * SECTOR_GEO.FILL) / 2;
+    for (const kid of sector.contextIds) {
+      const delta = Math.abs(
+        ((pos.get(kid).angle - sector.angle + Math.PI) % (Math.PI * 2)) - Math.PI,
+      );
+      assert.ok(delta <= half + 1e-6, `${kid} is inside ${sector.id}'s sector`);
+      // And strictly inside the sector's own bounds — never over a boundary
+      // into a sibling branch, which is what would make parentage ambiguous.
+      assert.ok(delta < sector.share / 2, `${kid} does not cross a sector boundary`);
     }
   }
 });
 
-test('12 o\'clock is a sector boundary, so the ring annotations are never covered', () => {
-  // The annotations are stacked up the vertical gutter. If a project ever
-  // landed exactly there, its name and the ring labels would collide.
+test('12 o\'clock is a sector boundary, so the vertical gutter stays clear', () => {
   for (const count of [1, 2, 3, 4, 5, 8]) {
     const nodes = [node('W', 'workspace', 'Workspace')];
     for (let i = 0; i < count; i++) nodes.push(node(`P${i}`, 'project', `P${i}`, null, { day: i + 1 }));
-    const pos = layoutSecondBrain({ nodes, edges: [] });
+    const pos = layoutSectorTree({ nodes, edges: [] });
     const share = (Math.PI * 2) / count;
     for (let i = 0; i < count; i++) {
-      const off = Math.abs(((pos.get(`P${i}`).angle - BRAIN_GEO.START + Math.PI) % (Math.PI * 2)) - Math.PI);
+      const off = Math.abs(
+        ((pos.get(`P${i}`).angle - SECTOR_GEO.START + Math.PI) % (Math.PI * 2)) - Math.PI,
+      );
       assert.ok(off > share * 0.4, `with ${count} projects, P${i} is clear of the gutter`);
     }
   }
 });
 
-test('Second Brain rings fill outward, and an object with no project sits on the inbox ring', () => {
+test('context fills outward, and an object with no project gets its own real sector', () => {
   const nodes = [node('W', 'workspace', 'Workspace'), node('P1', 'project', 'P1', null, { day: 1 })];
   // More context than one ring holds, so the next ring out has to be used.
   for (let i = 0; i < 9; i++) nodes.push(node(`N${i}`, 'note', `N${i}`, 'P1', { day: i + 2 }));
   nodes.push(node('ORPHAN', 'note', 'Unfiled', null, { day: 20 }));
-  const pos = layoutSecondBrain({ nodes, edges: [] });
+  const graph = { nodes, edges: [] };
+  const pos = layoutSectorTree(graph);
 
   const radii = [...new Set(Array.from({ length: 9 }, (_, i) => Math.round(pos.get(`N${i}`).radius / 10)))];
   assert.ok(radii.length > 1, 'nine captures reach more than one ring');
-  assert.equal(pos.get('ORPHAN').band, 'inbox');
-  assert.ok(Math.abs(pos.get('ORPHAN').radius - BRAIN_GEO.R_INBOX) < 1e-9);
+
+  // An unfiled object is not dropped into a data-type "inbox ring": it gets a
+  // real sector of its own, with no project node, because there is no project.
+  const sectors = sectorsOf(graph);
+  assert.deepEqual(sectors.map((sc) => sc.id), ['P1', UNFILED_SECTOR]);
+  const unfiled = sectors[1];
+  assert.equal(unfiled.nodeId, null, 'no project object is invented for it');
+  assert.deepEqual(unfiled.contextIds, ['ORPHAN']);
+  assert.equal(pos.get('ORPHAN').sectorId, UNFILED_SECTOR);
+
+  // A workspace with nothing unfiled has no such sector at all.
+  const tidy = sectorsOf({
+    nodes: nodes.filter((n) => n.id !== 'ORPHAN'),
+    edges: [],
+  });
+  assert.deepEqual(tidy.map((sc) => sc.id), ['P1']);
 });
 
-test('the same object keeps one identity across both ring projections', () => {
+test('sector counts are the real number of context objects in each branch', () => {
+  const sectors = sectorsOf(fixture());
+  assert.deepEqual(
+    sectors.map((sc) => [sc.title, sc.count]),
+    [['API Gateway Rework', 2], ['Context Engine', 2]],
+  );
+  // A project with nothing in it still gets its sector, and reports zero — the
+  // map states its own emptiness rather than being filled.
+  const nodes = [node('W', 'workspace', 'W'), node('P9', 'project', 'Empty', null, { day: 1 })];
+  assert.equal(sectorsOf({ nodes, edges: [] })[0].count, 0);
+});
+
+test('sector focus lights one branch and dims every other', () => {
+  const g = fixture();
+  const index = buildIndex(g);
+  const pos = layoutSectorTree(g, index);
+
+  const lit = sectorFocusSet(index, pos, 'P1');
+  // The project, its own context, and the hub the branch hangs from.
+  assert.ok(lit.has('P1'));
+  assert.ok(lit.has('N1') && lit.has('N2'));
+  assert.ok(lit.has('W'), 'the root of the tree is not an unrelated branch');
+  // N3 is lit ONLY because a real `references` edge runs N1 → N3. The
+  // relationship is in the payload; nothing was added because it looked near.
+  assert.ok(lit.has('N3'), 'a genuinely related object stays visible');
+  assert.ok(!lit.has('N4'), 'an unrelated object in another branch is dimmed');
+
+  // Focusing the other branch is symmetric.
+  const other = sectorFocusSet(index, pos, 'P2');
+  assert.ok(other.has('P2') && other.has('N3') && other.has('N4'));
+  assert.ok(!other.has('N2'));
+
+  // No focus ⇒ nothing is dimmed at all.
+  assert.equal(sectorFocusSet(index, pos, null).size, 0);
+  // An unknown sector dims nothing rather than dimming everything.
+  assert.equal(sectorFocusSet(index, pos, 'nope').size, 0);
+});
+
+test('focus is emphasis, not filtering: every node is still in the layout', () => {
+  const g = fixture();
+  const index = buildIndex(g);
+  const pos = layoutSectorTree(g, index);
+  sectorFocusSet(index, pos, 'P1');
+  assert.deepEqual([...pos.keys()].sort(), g.nodes.map((n) => n.id).sort());
+  // And the sector index accounts for every placed node except the hub.
+  const bySector = sectorIndexOf(pos);
+  const placed = [...bySector.values()].reduce((n, set) => n + set.size, 0);
+  assert.equal(placed, g.nodes.length - 1);
+});
+
+test('the same object keeps one identity across both projections', () => {
   const g = fixture();
   const wedge = layoutGraph(g);
-  const brain = layoutSecondBrain(g);
-  assert.deepEqual([...wedge.keys()].sort(), [...brain.keys()].sort());
+  const tree = layoutSectorTree(g);
+  assert.deepEqual([...wedge.keys()].sort(), [...tree.keys()].sort());
 });
 
-test('ring annotations report real counts, and an empty ring says zero', () => {
-  const rings = brainRings(fixture());
-  const by = Object.fromEntries(rings.map((r) => [r.key, r]));
-  assert.equal(by.domain.count, 2, 'two real projects');
-  assert.equal(by.capability.count, CAPABILITIES.length);
-  assert.equal(by['memory-0'].count, 4, 'four real captures');
-  // Nothing is unfiled in the fixture: the ring is still drawn, and states 0.
-  assert.equal(by.inbox.count, 0);
-  assert.ok(rings.every((r) => Number.isInteger(r.count)));
-  // Radii increase outward — core → capabilities → domains → context → boundary.
-  const ordered = rings.map((r) => r.radius);
-  assert.deepEqual(ordered, [...ordered].sort((a, b) => a - b));
+test('the layout is deterministic — the same payload never reshuffles', () => {
+  const g = fixture();
+  const a = layoutSectorTree(g);
+  const b = layoutSectorTree(g);
+  for (const [id, at] of a) {
+    assert.deepEqual(at, b.get(id), `${id} keeps its place`);
+  }
 });

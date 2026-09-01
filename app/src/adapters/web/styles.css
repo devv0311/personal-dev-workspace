@@ -107,13 +107,6 @@ body::before {
   color: var(--ink-faint);
 }
 .mono { font-family: var(--font-mono); letter-spacing: 0.01em; }
-/* Tier 1: the one number that matters, large — white, not accent. */
-.metric {
-  font: 300 27px/0.95 var(--font-mono);
-  letter-spacing: -0.01em;
-  color: var(--ink);
-}
-.metric.sm { font-size: 20px; }
 .tag {
   font: 600 8px/1 var(--font-ui);
   letter-spacing: 0.13em; text-transform: uppercase;
@@ -121,8 +114,7 @@ body::before {
   border: 1px solid var(--hair);
   border-radius: 2px; padding: 2px 4px;
 }
-/* PREVIEW / OFFLINE stay legible as words — no colour meaning (§8.3). */
-.tag.preview { color: var(--ink-faint); border-color: var(--hair-2); }
+/* OFFLINE stays legible as a word — no colour meaning (§8.3). */
 .tag.offline { color: var(--ink-ghost); }
 
 .dot { width: 5px; height: 5px; border-radius: 50%; display: inline-block; flex: none; background: var(--ink-dim); }
@@ -301,11 +293,12 @@ body::before {
   padding: 5px 12px;
 }
 .legend-pill .li { display: flex; align-items: center; gap: 6px; font: 600 8px/1 var(--font-ui); letter-spacing: 0.12em; text-transform: uppercase; color: var(--ink-faint); }
-/* Size, not colour, separates the three structural kinds. */
-.legend-pill .sw { border-radius: 50%; background: var(--ink-dim); flex: none; }
-.legend-pill .sw.a { width: 9px; height: 9px; background: none; border: 1px solid var(--ink-dim); }
-.legend-pill .sw.b { width: 7px; height: 7px; }
-.legend-pill .sw.c { width: 4px; height: 4px; }
+/* The legend names each class in words; the swatch only reinforces it. */
+.legend-pill .sw { width: 7px; height: 7px; border-radius: 50%; background: var(--ink-dim); flex: none; }
+.legend-pill .sw.sem-action { background: var(--sem-action); }
+.legend-pill .sw.sem-domain { background: var(--sem-domain); }
+.legend-pill .sw.sem-memory { background: var(--sem-memory); }
+.legend-pill .sw.sem-temporal { background: var(--sem-temporal); }
 
 .field-empty {
   position: absolute; inset: 0; display: grid; place-content: center;
@@ -319,7 +312,6 @@ body::before {
 
 .gridbg { fill: rgba(255, 255, 255, 0.028); }
 
-.mem-anchor { stroke: rgba(255, 255, 255, 0.08); stroke-width: 0.6; }
 
 /* ---- edges: real relationships only ------------------------------
    Relationships are a query result, not permanent decoration (§5.6). At rest
@@ -785,14 +777,6 @@ body.searching .center.inspecting .inspector { opacity: 0.16; pointer-events: no
    RIGHT RAIL — "what wants you": items needing attention. Deliberately
    sparse — retired reference widgets are not recreated to fill it (§4.1, Q5).
    ========================================================================== */
-.attn-count { display: flex; align-items: baseline; gap: var(--s2); margin-bottom: var(--s3); }
-.attn-row { display: grid; grid-template-columns: 12px 1fr auto; gap: var(--s2); align-items: start; padding: 5px 0; }
-.attn-row + .attn-row { border-top: 1px solid var(--hair-faint); }
-.attn-row .ic { text-align: center; font-size: 10px; color: var(--ink-faint); }
-.attn-row .t { color: var(--ink); font-size: 10.5px; }
-.attn-row .m { color: var(--ink-faint); font-size: 9px; }
-.attn-row .tm { color: var(--ink-ghost); font: 500 9px/1 var(--font-mono); }
-
 .sect > header .meta.note { margin-left: auto; font: 500 8px/1 var(--font-mono); letter-spacing: 0.06em; color: var(--ink-ghost); text-transform: none; }
 .sect-note { margin: 0 0 var(--s3); color: var(--ink-ghost); font-size: 9px; letter-spacing: 0.05em; }
 
@@ -980,34 +964,6 @@ body[data-view="brain"] .os-field {
 .cr-marker { fill: none; stroke: rgba(255, 255, 255, 0.085); stroke-width: 0.9; }
 .cr-hair   { stroke: rgba(255, 255, 255, 0.05); stroke-width: 0.7; }
 
-/* ---- command ring: the real capabilities -------------------------------- */
-.cr-badge { cursor: pointer; }
-.cr-badge .bg  { fill: rgba(8, 9, 12, 0.92); }
-.cr-badge .rim { fill: none; stroke: rgba(255, 255, 255, 0.17); stroke-width: 1.1; transition: stroke 140ms; }
-.cr-badge .hex { fill: none; stroke: rgba(255, 255, 255, 0.07); stroke-width: 0.8; }
-.cr-badge .gl  {
-  fill: var(--ink-dim); font-family: var(--font-ui); font-size: 21px;
-  text-anchor: middle; pointer-events: none; transition: fill 140ms;
-}
-.cr-badge .cap-label {
-  fill: var(--ink-faint); font: 600 11px var(--font-ui); letter-spacing: 0.18em;
-  text-anchor: middle; pointer-events: none; transition: fill 140ms;
-}
-.cr-badge .cap-cmd {
-  fill: var(--ink-ghost); font: 500 9.5px var(--font-mono); letter-spacing: 0.04em;
-  text-anchor: middle; pointer-events: none;
-}
-.cr-badge:hover .rim, .cr-badge:focus-visible .rim, .cr-badge.match .rim {
-  stroke: var(--sem-action); filter: drop-shadow(0 0 10px rgba(255, 122, 26, 0.45));
-}
-.cr-badge:hover .gl, .cr-badge:focus-visible .gl, .cr-badge.match .gl { fill: var(--sem-action); }
-.cr-badge:hover .cap-label, .cr-badge:focus-visible .cap-label, .cr-badge.match .cap-label { fill: var(--ink); }
-.cr-badge:focus-visible { outline: none; }
-/* Search attenuates the ring in place; matches keep their position (§19). */
-.ring-svg.searching .cr-badge:not(.match) { opacity: 0.18; }
-.ring-svg.searching #cr-atmo, .ring-svg.searching #cr-deco { opacity: 0.3; }
-.ring-svg.searching #cr-core { opacity: 0.35; }
-
 /* ---- the core ------------------------------------------------------------ */
 .cr-core { cursor: pointer; }
 .cr-core .core-hex  { fill: none; stroke: rgba(255, 122, 26, 0.26); stroke-width: 1.2; }
@@ -1067,23 +1023,6 @@ body[data-view="brain"] .os-field {
 .br-track.sem-action   { stroke: rgba(255, 122, 26, 0.2); stroke-dasharray: 3 5; }
 .br-track.sem-domain   { stroke: rgba(55, 182, 217, 0.17); }
 .br-track.sem-memory   { stroke: rgba(169, 127, 224, 0.11); }
-.br-spoke  { stroke: rgba(255, 255, 255, 0.035); stroke-width: 0.6; vector-effect: non-scaling-stroke; }
-.br-radial { stroke: rgba(255, 255, 255, 0.05); stroke-width: 0.6; vector-effect: non-scaling-stroke; }
-.br-anno { pointer-events: none; }
-.br-anno .rl {
-  font: 600 calc(8px / var(--zoom, 1)) var(--font-ui); letter-spacing: 0.18em;
-  fill: var(--ink-ghost);
-  paint-order: stroke; stroke: #000; stroke-width: calc(3px / var(--zoom, 1)); stroke-linejoin: round;
-}
-.br-anno .rn {
-  font: 500 calc(8px / var(--zoom, 1)) var(--font-mono); letter-spacing: 0.06em;
-  fill: var(--ink-ghost); opacity: 0.66;
-  paint-order: stroke; stroke: #000; stroke-width: calc(3px / var(--zoom, 1)); stroke-linejoin: round;
-}
-.br-anno.sem-action .rl { fill: rgba(255, 122, 26, 0.6); }
-.br-anno.sem-domain .rl { fill: rgba(55, 182, 217, 0.6); }
-.br-anno.sem-memory .rl { fill: rgba(169, 127, 224, 0.55); }
-
 /* Inner ring: real capabilities. Never graph objects — no id, no search hit,
    no inspector. Activating one runs the capability. */
 .br-cap { cursor: pointer; }
@@ -1157,28 +1096,8 @@ body[data-view="brain"] .os-field {
 .tm-row.me .tm-name { color: var(--ink); }
 
 /* =============================================================================
-   RIGHT RAIL — Email (preview) · Skills Deck (real) · Routines (preview)
+   RIGHT RAIL — Repository · Attention Stack · Skills Deck · Routines
    ========================================================================== */
-.hero-count { display: flex; align-items: baseline; gap: var(--s3); margin-bottom: var(--s3); }
-.hero-count .metric { font-size: 34px; }
-.hero-count .metric.off { color: var(--ink-ghost); }
-.hc-l { display: flex; flex-direction: column; gap: 1px; }
-.label.sub { color: var(--ink-ghost); }
-
-.msg-list { list-style: none; margin: 6px 0 var(--s4); padding: 0; }
-.msg {
-  display: grid; grid-template-columns: 12px 1fr auto; gap: var(--s2);
-  align-items: center; padding: 6px 0; border-top: 1px solid var(--hair-faint);
-}
-.msg:first-child { border-top: none; }
-.msg .ic { color: var(--ink-ghost); font-size: 9px; text-align: center; }
-.msg .t  { color: var(--ink-dim); font-size: 10.5px; }
-.msg .tm { color: var(--ink-ghost); font: 500 9px/1 var(--font-mono); }
-.msg.empty .t, .msg.empty .tm, .msg.empty .ic { opacity: 0.5; }
-
-.mixbar { display: grid; grid-template-columns: repeat(6, 1fr); gap: 3px; margin-top: 6px; }
-.mixbar i { height: 6px; background: rgba(255, 255, 255, 0.045); border: 1px solid var(--hair-faint); }
-
 /* Elevation is reserved for runnable things: a Skills card is a pressable
    object, so it — and nothing else in the rails — is raised (§15). */
 .skill { box-shadow: 0 8px 20px -16px #000; }
@@ -1247,15 +1166,13 @@ body[data-view="brain"] .rail-toggle { visibility: hidden; }
 .center.inspecting .core-bloom { opacity: 0.095; }
 .cr-bloom { opacity: 0.085; }
 
-/* The ring tracks carry the structure — they have to be legible as rings, not
-   merely inferable from where the nodes happen to sit. */
+/* The two structural tracks have to be legible as rings, not merely inferable
+   from where the nodes happen to sit. */
 .br-track.sem-action { stroke: rgba(255, 122, 26, 0.3); }
 .br-track.sem-domain { stroke: rgba(55, 182, 217, 0.26); }
-.br-track.sem-memory { stroke: rgba(169, 127, 224, 0.18); }
 .br-bound { stroke: rgba(255, 255, 255, 0.13); }
 .br-tick  { stroke: rgba(255, 255, 255, 0.1); }
 .br-tick.long { stroke: rgba(255, 255, 255, 0.24); }
-.br-spoke { stroke: rgba(255, 255, 255, 0.05); }
 /* The map's own identity readout duplicates the bar above it. */
 body[data-view="brain"] .field-wrap .field-readout.tl { display: none; }
 
@@ -1371,3 +1288,275 @@ body[data-view="brain"] .field-wrap .field-readout.tl { display: none; }
 }
 .skill.unavailable.click:hover .cmd, .skill.unavailable.click:focus-visible .cmd { color: var(--ink); }
 .skill.unavailable .run { color: var(--ink-ghost); }
+
+/* =============================================================================
+   T3.3-CORRECTION — COMMAND CENTRE ARCHITECTURE, IDENTITY, ATTENTION, MAIL
+
+   Nothing below is a new visual language. The near-black ground, the single
+   restrained orange accent, the hairline structure, the compact technical
+   labels and the reference-derived composition are unchanged; these rules give
+   the corrected ARCHITECTURE a place to live inside it:
+
+     • the artifact orbit that replaced six static capability circles;
+     • the radial sector tree that replaced the ring-per-data-type map;
+     • the Attention Stack that replaced a dead e-mail placeholder;
+     • per-user mail settings, and the model/effort control on a Skills card.
+
+   Semantic colour is used only where a class is ALSO stated in words (§4.13),
+   and every glow is restrained — a category tint at low alpha, never neon.
+   ========================================================================== */
+
+/* ---- header: two identities, never conflated ---------------------------- */
+.ident { display: flex; align-items: baseline; gap: var(--s3); margin-top: 1px; }
+.ident .who { display: inline-flex; align-items: baseline; gap: 5px; }
+.ident .k { font-size: 7.5px; letter-spacing: 0.16em; }
+.ident .v { font: 500 9.5px/1 var(--font-mono); color: var(--ink-dim); letter-spacing: 0.04em; }
+/* The head is the workspace's owner; the accent marks it as the standing fact,
+   while "you" stays neutral because it changes with the credential. */
+.ident .head .v { color: var(--action); }
+.ident .you .v { color: var(--ink-faint); }
+/* When you are the head, the two facts collapse to one and the role is said
+   in words beside your name rather than by printing the name twice. */
+.ident .you .role { font-size: 7.5px; letter-spacing: 0.14em; color: var(--action); }
+
+/* ---- command centre: the artifact orbit --------------------------------- */
+.cr-orbit { fill: none; stroke: rgba(255, 255, 255, 0.05); stroke-width: 0.9; }
+.cr-orbit-empty {
+  fill: var(--ink-ghost); font: 600 10px var(--font-ui); letter-spacing: 0.22em;
+}
+
+/* Category tints. Each is also spelled out on the node, in the tooltip and in
+   the modal, so hue never carries the class by itself. */
+.cr-artifact { cursor: pointer; --af: #8f9bd8; }
+.cr-artifact[data-category="routine"]      { --af: #6bbfae; }
+.cr-artifact[data-category="ci"]           { --af: #5b9dd6; }
+.cr-artifact[data-category="pull_request"] { --af: #a98cd9; }
+.cr-artifact[data-category="issue"]        { --af: #f5b53d; }
+.cr-artifact[data-category="ai_result"]    { --af: #ff9147; }
+
+.cr-artifact .glow { fill: var(--af); opacity: 0.07; }
+.cr-artifact .bg   { fill: rgba(8, 9, 12, 0.94); }
+.cr-artifact .rim  { fill: none; stroke: var(--af); stroke-opacity: 0.45; stroke-width: 1.1; transition: stroke-opacity 140ms; }
+.cr-artifact .seen { fill: var(--af); opacity: 0.9; }
+/* The name IS the artifact: it is a click target, not a caption beside one.
+   Both lines belong to the node's own group, so clicking either opens it. */
+.cr-artifact .af-label {
+  fill: var(--ink-faint); font: 600 10px var(--font-ui); letter-spacing: 0.13em;
+  text-anchor: middle; transition: fill 140ms;
+}
+.cr-artifact .af-kind {
+  fill: var(--ink-ghost); font: 500 8.5px var(--font-mono); letter-spacing: 0.06em;
+  text-anchor: middle;
+}
+/* Unread is a state: a filled centre, a firmer rim, a brighter name — and the
+   word "unread" in the tooltip and the accessible name. */
+.cr-artifact.unread .rim  { stroke-opacity: 0.85; }
+.cr-artifact.unread .glow { opacity: 0.13; }
+.cr-artifact.unread .af-label { fill: var(--ink-dim); }
+.cr-artifact:hover .rim, .cr-artifact:focus-visible .rim {
+  stroke-opacity: 1; filter: drop-shadow(0 0 9px var(--af));
+}
+.cr-artifact:hover .af-label, .cr-artifact:focus-visible .af-label,
+.cr-artifact.match .af-label { fill: var(--ink); }
+.cr-artifact:focus-visible { outline: none; }
+.cr-artifact.match .rim { stroke: var(--focus); stroke-opacity: 1; }
+.ring-svg.searching .cr-artifact:not(.match) { opacity: 0.18; }
+
+/* ---- Second Brain: the radial sector tree ------------------------------- */
+/* Structure that states parentage: a divider per sector boundary, a trunk from
+   the hub to each project, a branch from a project to each of its own context
+   objects. Hairlines, so the tree reads as structure and never as data. */
+.br-divider { stroke: rgba(255, 255, 255, 0.05); stroke-width: 0.7; vector-effect: non-scaling-stroke; }
+.br-trunk   { stroke: rgba(255, 255, 255, 0.13); stroke-width: 1; vector-effect: non-scaling-stroke; }
+.br-branch  { stroke: rgba(255, 255, 255, 0.055); stroke-width: 0.7; vector-effect: non-scaling-stroke; }
+.br-sector  { transition: opacity 160ms; }
+.br-sector-anno .sl {
+  font: 600 calc(8px / var(--zoom, 1)) var(--font-ui); letter-spacing: 0.16em;
+  fill: var(--ink-ghost);
+  paint-order: stroke; stroke: #000; stroke-width: calc(3px / var(--zoom, 1)); stroke-linejoin: round;
+}
+.br-sector.sem-domain .br-trunk { stroke: rgba(55, 182, 217, 0.28); }
+.br-sector.sem-domain .sl { fill: rgba(55, 182, 217, 0.65); }
+.br-sector.sem-memory .sl { fill: rgba(169, 127, 224, 0.55); }
+
+/* SECTOR FOCUS: the focused branch keeps its full presence, everything else
+   drops to 0.15. Emphasis, not filtering — nothing leaves the graph, and the
+   rails, header and panels around the map are untouched. */
+.gnode.sector-dim,
+.edge-line.sector-dim,
+.br-sector.sector-dim { opacity: 0.15; }
+.field-svg.sector-focus .gnode:not(.sector-dim) .lbl.mem { opacity: 1; }
+
+/* Ring 1 shows a skill's effective configuration when the runtime reports one. */
+.br-cap .cfg {
+  fill: var(--ink-ghost); font: 500 calc(6.5px / var(--zoom, 1)) var(--font-mono);
+  letter-spacing: 0.06em; text-anchor: middle; pointer-events: none;
+  paint-order: stroke; stroke: #000; stroke-width: calc(2.5px / var(--zoom, 1)); stroke-linejoin: round;
+}
+/* An unavailable skill looks unavailable AND refuses: the class is cosmetic,
+   aria-disabled and the handler's guard are the behaviour. */
+.br-cap.unavailable { opacity: 0.4; cursor: not-allowed; }
+.br-cap.unavailable .rim { stroke: var(--hair-2); }
+.br-cap.unavailable:hover .rim { stroke: var(--hair-2); filter: none; }
+
+/* ---- Attention Stack ---------------------------------------------------- */
+.pills { display: flex; flex-wrap: wrap; gap: 4px; margin-bottom: var(--s3); }
+.pills .cpill {
+  display: inline-flex; align-items: baseline; gap: 5px;
+  font: 600 8px/1 var(--font-ui); letter-spacing: 0.11em; text-transform: uppercase;
+  color: var(--ink-faint); border: 1px solid var(--hair-2); border-radius: 999px;
+  padding: 4px 9px;
+}
+.pills .cpill .n { font-family: var(--font-mono); font-size: 9px; color: var(--ink); letter-spacing: 0; }
+/* An unknown total renders as an em dash, never as the size of the page. */
+.pills .cpill.unknown .n { color: var(--ink-ghost); }
+
+.attn-list { list-style: none; margin: 0; padding: 0; }
+.attn-list .ai {
+  display: grid; grid-template-columns: 1fr auto; gap: 2px var(--s2);
+  width: 100%; text-align: left; background: transparent; border: none;
+  border-top: 1px solid var(--hair-faint); padding: 7px 0; cursor: pointer;
+  font: inherit; color: inherit;
+}
+.attn-list li:first-child .ai { border-top: none; }
+.attn-list .ai:disabled { cursor: default; }
+.attn-list .t { color: var(--ink); font-size: 10.5px; line-height: 1.35; overflow-wrap: anywhere; }
+.attn-list .ai:hover:not(:disabled) .t { color: var(--action); }
+.attn-list .tm { font: 500 9px/1 var(--font-mono); color: var(--ink-ghost); white-space: nowrap; }
+.attn-list .m { grid-column: 1 / -1; color: var(--ink-faint); font-size: 9px; overflow-wrap: anywhere; }
+/* Which mailbox asked for you. Present only for mail, and only the address. */
+.attn-list .acct { color: var(--ink-ghost); font: 500 8.5px/1.3 var(--font-mono); letter-spacing: 0.03em; }
+.attn-list .k {
+  font: 600 7px/1 var(--font-ui); letter-spacing: 0.1em; text-transform: uppercase;
+  color: var(--ink-ghost);
+}
+
+.src-list { list-style: none; margin: 2px 0 var(--s3); padding: 0; }
+.src-list li {
+  display: grid; grid-template-columns: auto 1fr; gap: var(--s2); align-items: baseline;
+  padding: 4px 0; border-top: 1px solid var(--hair-faint);
+}
+.src-list li:first-child { border-top: none; }
+.src-list .s {
+  font: 600 7.5px/1 var(--font-ui); letter-spacing: 0.11em; text-transform: uppercase;
+  color: var(--ink-faint); white-space: nowrap;
+}
+.src-list .d { color: var(--ink-ghost); font-size: 9.5px; line-height: 1.4; overflow-wrap: anywhere; }
+.src-list li.ok  .s { color: var(--ok); }
+.src-list li.off .s { color: var(--ink-ghost); }
+.src-list li.err .s { color: var(--error); }
+
+/* ---- Skills: the model / effort control --------------------------------- */
+.sk-cfg {
+  grid-column: 1 / -1; justify-self: start;
+  font: 500 7.5px/1 var(--font-mono); letter-spacing: 0.08em; text-transform: uppercase;
+  color: var(--ink-dim); background: transparent; border: 1px solid var(--hair-2);
+  border-radius: 2px; padding: 3px 6px; cursor: pointer;
+}
+.sk-cfg:hover, .sk-cfg:focus-visible { border-color: rgba(255, 122, 26, 0.5); color: var(--action); }
+.sk-cfg[disabled] { opacity: 0.5; cursor: default; }
+.sk-cfg[disabled]:hover { border-color: var(--hair-2); color: var(--ink-dim); }
+
+.cfg-pop {
+  position: fixed; z-index: 60; width: 236px;
+  background: rgba(3, 3, 4, 0.97); border: 1px solid var(--hair-2);
+  box-shadow: 0 18px 50px -18px #000; padding: 8px 10px 10px;
+  display: flex; flex-direction: column; gap: 5px;
+}
+.cfg-pop > header { display: flex; align-items: center; gap: var(--s2); }
+.cfg-pop > header .close { margin-left: auto; }
+.cfg-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 4px; }
+.cfg-opt {
+  font: 600 8px/1 var(--font-ui); letter-spacing: 0.11em; text-transform: uppercase;
+  color: var(--ink-dim); background: transparent; border: 1px solid var(--hair);
+  border-radius: 2px; padding: 6px 4px; cursor: pointer; text-align: center;
+}
+.cfg-opt:hover:not([disabled]) { border-color: var(--hair-2); color: var(--ink); }
+.cfg-opt[aria-pressed="true"] {
+  color: var(--action); border-color: rgba(255, 122, 26, 0.55); background: rgba(255, 122, 26, 0.08);
+}
+/* An option the runtime cannot execute is VISIBLY unavailable and cannot be
+   chosen — and the pipeline refuses it too, so it can never appear to run. */
+.cfg-opt[disabled] {
+  opacity: 0.34; cursor: not-allowed; text-decoration: line-through;
+  border-style: dashed;
+}
+.cfg-note { margin: 4px 0 0; color: var(--ink-ghost); font-size: 9px; line-height: 1.45; }
+
+/* ---- artifact detail modal ---------------------------------------------- */
+.modal { position: fixed; inset: 0; z-index: 70; display: grid; place-items: center; }
+.modal-scrim { position: absolute; inset: 0; background: rgba(0, 0, 0, 0.66); }
+.modal-card {
+  position: relative; width: min(440px, calc(100vw - 32px)); max-height: 78vh;
+  display: flex; flex-direction: column;
+  background: var(--bg-1); border: 1px solid var(--hair-2);
+  box-shadow: 0 26px 70px -24px #000;
+}
+.modal-card > header {
+  display: flex; align-items: center; gap: var(--s2);
+  padding: 8px 10px 8px 14px; border-bottom: 1px solid var(--hair-faint);
+}
+.modal-card > header .ct { margin-left: auto; font-size: 8.5px; color: var(--ink-ghost); }
+.modal-card > header .close { margin-left: 0; }
+.modal-body { padding: var(--s3) var(--s4) var(--s4); overflow-y: auto; scrollbar-width: thin; }
+.modal-body h2 { margin: 0 0 4px; font: 400 14px/1.3 var(--font-ui); overflow-wrap: anywhere; }
+.af-meta { margin: var(--s3) 0 0; display: grid; grid-template-columns: auto 1fr; gap: 4px var(--s3); }
+.af-meta dt {
+  font: 600 7.5px/1.6 var(--font-ui); letter-spacing: 0.12em; text-transform: uppercase;
+  color: var(--ink-ghost);
+}
+.af-meta dd { margin: 0; font: 500 10px/1.5 var(--font-mono); color: var(--ink-dim); overflow-wrap: anywhere; }
+.modal-actions { display: flex; gap: 6px; margin-top: var(--s4); flex-wrap: wrap; }
+
+/* ---- settings · mail accounts ------------------------------------------- */
+.settings {
+  position: fixed; top: var(--header-h); right: 0; bottom: 0; z-index: 45;
+  width: min(392px, 100vw); background: var(--bg-1);
+  border-left: 1px solid var(--hair-2); box-shadow: 0 0 46px -8px #000;
+  display: flex; flex-direction: column;
+}
+.settings > header {
+  display: flex; align-items: center; gap: var(--s2);
+  padding: 10px var(--s4); border-bottom: 1px solid var(--hair-faint);
+}
+.settings > header .ct { margin-left: auto; font-size: 9px; color: var(--ink-ghost); }
+.settings-body { padding: var(--s4); overflow-y: auto; scrollbar-width: thin; }
+.settings-body .label { margin-top: var(--s4); }
+.settings-body .label:first-child { margin-top: 0; }
+
+.kv { list-style: none; margin: 4px 0 0; padding: 0; }
+.kv li {
+  display: grid; grid-template-columns: 92px 1fr; gap: var(--s2);
+  padding: 4px 0; border-top: 1px solid var(--hair-faint);
+}
+.kv li:first-child { border-top: none; }
+.kv .k { font: 600 7.5px/1.7 var(--font-ui); letter-spacing: 0.12em; text-transform: uppercase; color: var(--ink-ghost); }
+.kv .v { font: 500 10px/1.5 var(--font-mono); color: var(--ink-dim); overflow-wrap: anywhere; }
+
+.mail-list { list-style: none; margin: 6px 0 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+.mail-card {
+  border: 1px solid var(--hair-2); border-radius: 3px; padding: 9px 10px;
+  display: flex; flex-direction: column; gap: 4px;
+  background: rgba(255, 255, 255, 0.022);
+}
+.mail-card .addr { color: var(--ink); font: 500 11px/1.3 var(--font-mono); overflow-wrap: anywhere; }
+.mail-card .st {
+  font: 600 7.5px/1 var(--font-ui); letter-spacing: 0.12em; text-transform: uppercase;
+  color: var(--ink-faint);
+}
+.mail-card .st.connected { color: var(--ok); }
+.mail-card .st.expired, .mail-card .st.pending { color: var(--warn); }
+.mail-card .st.error, .mail-card .st.revoked { color: var(--error); }
+.mail-card .why { color: var(--ink-ghost); font-size: 9.5px; line-height: 1.45; overflow-wrap: anywhere; }
+.mail-card .row { display: flex; gap: 5px; align-items: center; flex-wrap: wrap; margin-top: 2px; }
+.mail-card .feeds { display: inline-flex; align-items: center; gap: 5px; color: var(--ink-faint); font-size: 9.5px; margin-left: auto; }
+.mail-empty { color: var(--ink-faint); font-size: 10.5px; padding: var(--s2) 0; }
+
+@media (max-width: 720px) {
+  .settings { top: 0; width: 100vw; }
+  .cfg-pop { width: min(280px, calc(100vw - 24px)); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .br-sector { transition: none; }
+}

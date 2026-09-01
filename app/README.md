@@ -62,15 +62,42 @@ Open <http://localhost:4177>. Use the principal switcher (top right). Every
 option is a **real workspace member** — the demo principals `Alice` and `Bob`
 were removed at T3.3.2, and there is no client-side fallback list:
 
-- **Sanchit** is the workspace's primary member and owns the seeded projects.
-- **Shourya** is a member with exactly **one** project share — everything else
+- **Dev** is the **head of the workspace** and owns the seeded projects. That is
+  a fact in the data, not a label in the client: Dev's `workspace_membership`
+  carries the `owner` role, and the schema's partial unique index means a
+  workspace can have at most one head.
+- **Sanchit** is a member with exactly **one** project share — everything else
   is invisible to them (deny-by-default), which is what makes the authorization
   boundary demonstrable without an invented user.
-- **Dev**, **Aatika**, **Ananya** are members with no shares.
+- **Shourya**, **Aatika**, **Ananya** are members with no shares.
 
-The identity shown in the header is answered by the server (`GET /api/me`) from
-the principal row the presented credential resolved to — the client never names
-a user it has not been told about.
+The header states **two different identities and never conflates them**: the
+workspace's head, and whoever the presented credential resolves to. Both are
+answered by the server (`GET /api/me`) — the head from the membership row that
+carries `owner`, the current user from the principal row the credential resolved
+to. The client never names a user it has not been told about, and when you *are*
+the head the line collapses to one entry rather than printing the same name
+twice.
+
+**Headship grants nothing.** The head sees exactly what the `VisibilityPolicy`
+says they see, and has no access to any mailbox but their own. Both properties
+are asserted in `test/identity.test.ts` and `test/mail.test.ts`.
+
+### Connecting your own mail
+
+Mail is personal: an account belongs to the principal who connected it, never to
+the workspace and never to whoever heads it. Open **⚙ Settings → Mail accounts**
+to add one.
+
+You authenticate **at the provider** — DEVWORKSPACE never sees a mail password,
+and there is no password field on that surface. The flow is OAuth 2.0 with PKCE
+and a single-use server-minted `state`; the grant comes back to the server,
+which seals it (AES-256-GCM, `MAIL_TOKEN_KEY`) before storing it in a table that
+an ordinary account read never touches.
+
+A deployment with no `MAIL_TOKEN_KEY`, or with no provider credentials, offers
+the provider as **unavailable with the reason** rather than as a button that
+fails after consent. See `.env.example` for the keys.
 
 ## What is real vs. mocked
 

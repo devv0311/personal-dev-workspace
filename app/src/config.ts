@@ -28,10 +28,15 @@ function loadDotEnv(): void {
 loadDotEnv();
 
 const isTest = process.env.NODE_ENV === 'test';
+const port = Number(process.env.PORT ?? 4177);
+const env = (key: string): string | null => {
+  const v = process.env[key];
+  return v && v.trim() ? v.trim() : null;
+};
 
 export const config = {
   appRoot,
-  port: Number(process.env.PORT ?? 4177),
+  port,
   databaseUrl: isTest
     ? (process.env.TEST_DATABASE_URL ?? 'postgres://localhost:5432/devworkspace_test')
     : (process.env.DATABASE_URL ?? 'postgres://localhost:5432/devworkspace'),
@@ -63,4 +68,27 @@ export const config = {
   githubToken: process.env.GITHUB_TOKEN ?? null,
   /** How long a successful snapshot is reused before the source is re-read. */
   githubCacheTtlMs: Number(process.env.GITHUB_CACHE_TTL_MS ?? 300_000),
+
+  // --- T3.3-CORRECTION: per-user mail accounts -----------------------------
+  //
+  // Every value here is server-side only. No client id, no client secret and no
+  // token ever appears in a response or reaches the browser — the browser only
+  // ever receives the PROVIDER's own consent URL, which is public by design.
+  //
+  // There is deliberately NO default for the token key. A deployment without
+  // one cannot store a mail credential, so it must not offer to connect a
+  // mailbox; the settings surface says exactly that instead of failing after
+  // the user has already given consent at the provider.
+  /** 32 bytes, hex- or base64-encoded. Seals stored mail credentials at rest. */
+  mailTokenKey: env('MAIL_TOKEN_KEY'),
+  /** Public origin the provider redirects back to after consent. */
+  mailRedirectBase: env('MAIL_OAUTH_REDIRECT_BASE') ?? `http://localhost:${port}`,
+  mailGoogle: {
+    clientId: env('MAIL_GOOGLE_CLIENT_ID'),
+    clientSecret: env('MAIL_GOOGLE_CLIENT_SECRET'),
+  },
+  mailMicrosoft: {
+    clientId: env('MAIL_MICROSOFT_CLIENT_ID'),
+    clientSecret: env('MAIL_MICROSOFT_CLIENT_SECRET'),
+  },
 } as const;

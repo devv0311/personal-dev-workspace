@@ -16,25 +16,34 @@ import {
   pulseLinkTarget,
   explainObject,
   endpointIdentity,
-  CAPABILITIES,
+  SKILLS,
 } from './graph-model.js';
 
 /**
- * The dev-auth BOOTSTRAP credential (T3.3.2).
+ * The dev-auth BOOTSTRAP credential (T3.3.2; corrected at T3.3-CORRECTION).
  *
  * The demo principals `Alice` and `Bob` are gone, along with the client-side
- * table of principal labels that named them. This is a single id: the
- * workspace's real primary member, used only to make the very first
- * authenticated request, exactly as the P2.7 dev-auth boundary requires a
- * credential to be presented. It is replaced wholesale when real
- * authentication arrives.
+ * table of principal labels that named them. This is a single id — the
+ * workspace's head, Dev — used only to make the very first authenticated
+ * request, exactly as the P2.7 dev-auth boundary requires a credential to be
+ * presented. It is replaced wholesale when real authentication arrives.
  *
- * Nothing about the current user is asserted here. The identity actually shown
- * on screen comes from `/api/me`, which the SERVER answers from the principal
- * row the presented credential resolved to — so a name in the header is one
- * the datastore returned, never one this file invented.
+ * Nothing about identity is ASSERTED here. Who the current user is, and who
+ * heads the workspace, both come from `/api/me`, which the SERVER answers from
+ * the principal row the credential resolved to and from the membership that
+ * carries the `owner` role. A name in the header is one the datastore
+ * returned, never one this file invented — and this constant decides only
+ * which credential is presented first, not who anyone is.
  */
-const DEFAULT_PRINCIPAL_ID = '00000000-0000-4000-8000-0000000000d2';
+const DEFAULT_PRINCIPAL_ID = '00000000-0000-4000-8000-0000000000d1';
+
+/**
+ * The stored-principal key is versioned. A browser that still held the previous
+ * default would otherwise keep opening as the identity this correction moved
+ * away from, and the shell would look uncorrected for exactly the people who
+ * had used it before.
+ */
+const PRINCIPAL_KEY = 'dc.principalId.v2';
 
 /** The assistant service (Zone B). Separate origin: it holds no DB credential. */
 const ASSISTANT_URL = localStorage.getItem('dc.assistantUrl') || 'http://localhost:4178';
@@ -47,7 +56,7 @@ const state = {
   members: [],
   /** The authenticated identity, as the server reports it. Never assumed. */
   me: null,
-  principalId: localStorage.getItem('dc.principalId') || DEFAULT_PRINCIPAL_ID,
+  principalId: localStorage.getItem(PRINCIPAL_KEY) || DEFAULT_PRINCIPAL_ID,
   ask: { busy: false, result: null },
   graph: { nodes: [], edges: [], stats: { projects: 0, captures: 0 } },
   selected: null, // { node, detail }
@@ -55,12 +64,21 @@ const state = {
   resultIndex: -1,
   /** Whether the assistant answered its /healthz on the last probe. */
   assistantOnline: false,
+  /**
+   * What the assistant runtime says it can ACTUALLY execute. Empty lists are a
+   * real answer — the development stub is not a model and exposes no tier and
+   * no effort control — and the configuration matrix renders them as
+   * unavailable rather than as "everything is available".
+   */
+  runtime: { kind: null, model: null, tier: null, defaultEffort: null, models: [], efforts: [] },
+  /** Real produced outputs, from /api/artifacts. Never seeded. */
+  artifacts: [],
+  /** Each artifact source's own condition, so a gap can explain itself. */
+  artifactSources: [],
+  /** The caller's OWN mail accounts and the providers this deployment has. */
+  mail: { storage: { ok: false, reason: null }, providers: [], accounts: [] },
 };
 
-const principalLabel = (id) =>
-  (state.me && state.me.principalId === id ? state.me.displayName : null) ??
-  state.members.find((m) => m.id === id)?.displayName ??
-  'unknown principal';
 const $ = (id) => document.getElementById(id);
 
 /* ------------------------------------------------------------------- API -- */
@@ -88,13 +106,13 @@ async function api(path, opts = {}) {
 const view = createGraphView({
   svg: $('fsvg'),
   tip: $('node-tip'),
-  // The Second Brain is a concentric-ring projection of the same payload the
-  // rails and the inspector read (T3.2 §4).
-  layout: 'brain',
-  // `runCapability` is async since T3.3.5 (a Skills run is awaited so its
-  // outcome can be reported). The ring invocations are fire-and-forget, so the
-  // rejection is absorbed here rather than surfacing as an unhandled promise.
-  onCapability: (id) => void runCapability(id).catch(() => {}),
+  // The Second Brain is a RADIAL SECTOR TREE over the same payload the rails
+  // and the inspector read (T3.2 §4; geometry corrected at T3.3-CORRECTION §2).
+  layout: 'sector',
+  // `runSkill` is async since T3.3.5 (a run is awaited so its outcome can be
+  // reported). Ring invocations are fire-and-forget, so the rejection is
+  // absorbed here rather than surfacing as an unhandled promise.
+  onSkill: (id) => void runSkill(id).catch(() => {}),
   onSelect: (node) => {
     if (!node) closeInspector();
     else openInspector(node);
@@ -117,8 +135,13 @@ const view = createGraphView({
 const ring = createCommandRing({
   svg: $('osvg'),
   tip: $('node-tip'),
-  onAction: (id) => void runCapability(id).catch(() => {}),
+  // The orbit carries produced OUTPUTS, not capabilities: activating one opens
+  // the artifact itself (T3.3-CORRECTION §1).
+  onArtifact: (a) => openArtifact(a),
   onCore: () => enterBrain(),
+  // One timezone for the whole shell — the orbit's tooltip reads in the same
+  // wall clock as every other timestamp on screen.
+  formatTime: (iso) => `${fmtDate(iso)} IST`,
 });
 
 function enterBrain() {
@@ -146,12 +169,20 @@ function goTo(id) {
 }
 
 /**
- * Run a capability from the command ring, the Second Brain's inner ring or the
- * Skills Deck. Every branch delegates to something the shell already wires —
- * the capture form, the P3.4 assistant, the map's own relationship reveal, or
- * spatial search. Nothing here claims an executable the product lacks.
+ * Run a SKILL — from the Second Brain's inner ring or from the Skills Deck.
+ *
+ * There are four, and they are the four the product can actually run. The
+ * command view's six capability circles are gone, and with them the two
+ * "capabilities" that were never skills at all: Connect was the map's own
+ * selection gesture and Search was the spotlight, both still reachable from the
+ * rails where they belong.
+ *
+ * Every branch delegates to something the shell already wires — the capture
+ * form or the P3.4 assistant. Nothing here claims an executable the product
+ * lacks, and an assistant skill refuses outright when the assistant is not
+ * reachable rather than appearing to run.
  */
-async function runCapability(id) {
+async function runSkill(id) {
   document.body.classList.remove('drawer-left', 'drawer-right');
   switch (id) {
     case 'capture':
@@ -168,25 +199,14 @@ async function runCapability(id) {
       if (!state.assistantOnline) return { kind: 'ran', ok: false, detail: 'assistant offline' };
       openAsk();
       $('ask-input').value = 'Summarize this';
-      return { kind: 'ran', ...(await runAsk('Summarize this')) };
+      return { kind: 'ran', ...(await runAsk('Summarize this', id)) };
     }
     case 'extract': {
       if (!state.assistantOnline) return { kind: 'ran', ok: false, detail: 'assistant offline' };
       openAsk();
       $('ask-input').value = 'Extract tasks from this';
-      return { kind: 'ran', ...(await runAsk('Extract tasks from this')) };
+      return { kind: 'ran', ...(await runAsk('Extract tasks from this', id)) };
     }
-    case 'connect': {
-      // "What does this touch?" — selection is what reveals a node's real,
-      // typed, directional relationships, so Connect is that gesture by name.
-      enterBrain();
-      const target = state.selected?.node?.id ?? state.graph.nodes.find((n) => n.kind === 'workspace')?.id;
-      if (target) requestAnimationFrame(() => view.revealAndFocus(target));
-      return { kind: 'opened', note: 'relationships revealed' };
-    }
-    case 'search':
-      openSpotlight();
-      return { kind: 'opened', note: 'search open' };
     default:
       return { kind: 'none' };
   }
@@ -200,7 +220,9 @@ async function loadGraph({ keepSelection = true } = {}) {
     // re-frame it rather than inheriting the previous dataset's zoom.
     view.render(graph, { reframe: !keepSelection });
     // The core states the workspace's real size, from the same stats the rails
-    // read — the centre can never disagree with the panels around it.
+    // read — the centre can never disagree with the panels around it. The orbit
+    // around it is loaded separately, because artifacts are produced by systems
+    // the graph knows nothing about.
     ring.render(graph);
     renderFilters(graph);
     renderPulse(graph);
@@ -208,8 +230,11 @@ async function loadGraph({ keepSelection = true } = {}) {
     $('field-empty').hidden = graph.stats.projects > 0 || graph.stats.captures > 0;
     $('ro-tl').textContent = `WORKSPACE · ${graph.workspaceId.slice(0, 8)}`;
     renderIdentity();
-    $('os-tr').textContent =
-      `${graph.stats.captures} CAPTURES · ${graph.stats.projects} PROJECTS · ${graph.stats.edges} LINKS`;
+    // The command view's right-hand readout belongs to the ORBIT, and the orbit
+    // is artifacts — the workspace's own size is already stated on the core
+    // beneath it. Two writers on one readout would race, and whichever landed
+    // last would decide what the centre appeared to be counting.
+    $('os-tl').textContent = 'DEVWORKSPACE · COMMAND CENTRE';
     $('brain-meta').textContent = `${graph.stats.nodes} NODES · ${graph.stats.edges} EDGES`;
     setWorkspaceContext();
     renderActivity(graph);
@@ -221,7 +246,10 @@ async function loadGraph({ keepSelection = true } = {}) {
     state.graph = { nodes: [], edges: [], stats: { nodes: 0, edges: 0, projects: 0, captures: 0 } };
     view.render(state.graph);
     ring.render(state.graph);
-    $('os-tr').textContent = err.status === 401 ? 'NOT AUTHENTICATED' : 'WORKSPACE UNAVAILABLE';
+    $('os-tl').textContent =
+      err.status === 401
+        ? 'DEVWORKSPACE · NOT AUTHENTICATED'
+        : 'DEVWORKSPACE · WORKSPACE UNAVAILABLE';
     renderFilters(state.graph);
     renderPulse(state.graph);
     closeInspector();
@@ -377,11 +405,6 @@ function renderActivity(graph) {
 }
 
 /**
- * The Skills cards show the assistant's REAL provider when it is reachable —
- * never a fabricated model/effort badge. One probe of its public /healthz;
- * `offline` if it does not answer.
- */
-/**
  * How a Skills card describes the engine behind it.
  *
  * The T3.1 review rejected `FAKE · DETERMINISTIC-FAKE-1` on these cards, and
@@ -389,8 +412,7 @@ function renderActivity(graph) {
  * own /healthz, but printing it in a model slot dresses a stub up as a model
  * and an effort tier. The fix is not to hide the state — it is to state it in
  * words. A stub says it is a stub; a real provider is named, with the model it
- * actually reports and nothing more. No effort tier is shown anywhere, because
- * the service exposes none (T3.2 §8, §23).
+ * actually reports and nothing more (T3.2 §8, §23).
  */
 function providerName(kind) {
   return kind === 'fake' ? 'dev stub' : String(kind ?? 'unknown');
@@ -403,6 +425,99 @@ function providerLabel(p) {
 
 /** Skills whose engine is the assistant service rather than the core. */
 const ASSISTANT_SKILLS = ['flow-ask', 'flow-summarize', 'flow-extract'];
+/** Card id ⇄ skill id, so one runner serves the deck and the Second Brain ring. */
+const SKILL_BY_CARD = {
+  'flow-capture': 'capture',
+  'flow-ask': 'ask',
+  'flow-summarize': 'summarize',
+  'flow-extract': 'extract',
+};
+const CARD_BY_SKILL = Object.fromEntries(
+  Object.entries(SKILL_BY_CARD).map(([card, skill]) => [skill, card]),
+);
+
+/* ------------------------------------- model / effort (T3.3-CORRECTION §5) --
+ *
+ * A Skills card offers a configuration control, and the control tells the
+ * truth about three separate things:
+ *
+ *   1. WHAT WILL RUN. The badge shows the configuration that the next run will
+ *      actually send. With the development stub answering, there is no model
+ *      and no effort to send, and the badge says so instead of naming one.
+ *   2. WHAT CAN RUN. The matrix lists every model and effort the UI knows
+ *      about, and disables every one the CONFIGURED RUNTIME does not report as
+ *      supported. A disabled option cannot be selected here, and the assistant
+ *      pipeline refuses it as well — so an unsupported combination can never be
+ *      made to appear to have run.
+ *   3. WHAT DID RUN. After a run the assistant echoes the configuration it
+ *      used, and that — not the request — is what the badge is updated from.
+ */
+const MODEL_TIERS = ['haiku', 'sonnet', 'opus', 'fable'];
+const EFFORT_LEVELS = ['low', 'medium', 'high', 'xhigh'];
+const cfgKey = (skill, part) => `dc.skill.${skill}.${part}`;
+
+/** The selection a card holds, kept only while the runtime still supports it. */
+function skillConfig(skill) {
+  const model = localStorage.getItem(cfgKey(skill, 'model'));
+  const effort = localStorage.getItem(cfgKey(skill, 'effort'));
+  return {
+    model: model && state.runtime.models.includes(model) ? model : null,
+    effort: effort && state.runtime.efforts.includes(effort) ? effort : null,
+  };
+}
+
+/**
+ * The badge text for a card: the configuration a run will genuinely use.
+ * Falls back to the runtime's own default, and to a plain statement that there
+ * is no such control when the runtime exposes none.
+ */
+function skillConfigLabel(skill) {
+  if (!state.assistantOnline) return 'runtime unavailable';
+  if (state.runtime.models.length === 0 && state.runtime.efforts.length === 0) {
+    return `${providerName(state.runtime.kind)} · no model control`;
+  }
+  const chosen = skillConfig(skill);
+  const model = chosen.model ?? state.runtime.tier ?? state.runtime.model ?? '—';
+  const effort = chosen.effort ?? state.runtime.defaultEffort;
+  return effort ? `${model} · ${effort}` : `${model} · no effort control`;
+}
+
+/** Repaint every configuration badge, on the cards and on the Second Brain ring. */
+function renderSkillConfigs() {
+  for (const btn of document.querySelectorAll('.sk-cfg')) {
+    const skill = btn.dataset.cfg;
+    btn.textContent = skillConfigLabel(skill);
+    // The control is pressable only when there is something real to choose.
+    const choosable =
+      state.assistantOnline &&
+      (state.runtime.models.length > 0 || state.runtime.efforts.length > 0);
+    btn.disabled = !choosable;
+    btn.title = choosable
+      ? 'Choose the model and effort this skill runs with'
+      : `The configured runtime (${providerName(state.runtime.kind)}) exposes no model or effort control.`;
+  }
+  $('skill-runtime').textContent = state.assistantOnline
+    ? `Runtime · ${providerName(state.runtime.kind)}` +
+      (state.runtime.models.length
+        ? ` · models ${state.runtime.models.join(', ')} · effort ${state.runtime.efforts.join(', ')}`
+        : ' · exposes no model or effort control, so every option is unavailable')
+    : 'Runtime · assistant not reachable, so no skill can run.';
+
+  // The Second Brain's inner ring shows the same states and the same badges,
+  // because it runs the same skills through the same runner.
+  view.setSkillState(
+    SKILLS.map((sk) => {
+      const assistant = sk.engine === 'assistant';
+      const available = assistant ? state.assistantOnline : true;
+      return {
+        id: sk.id,
+        available,
+        reason: available ? null : 'assistant not reachable',
+        badge: assistant && available ? skillConfigLabel(sk.id) : sk.engine,
+      };
+    }),
+  );
+}
 
 /**
  * Executability is a state (T3.3.5).
@@ -431,6 +546,7 @@ function setSkillsAvailability(online) {
       slot.className = 'sk-state mono';
     }
   }
+  renderSkillConfigs();
 }
 
 /**
@@ -467,18 +583,136 @@ function skillRun(cardId) {
   };
 }
 
+/**
+ * Ask the assistant what it is and what it can execute.
+ *
+ * The capability lists come from the RUNTIME, not from this file: an empty
+ * models list means the configured runtime is not a model provider, and the
+ * matrix renders every model as unavailable rather than pretending otherwise.
+ */
 async function probeAssistant() {
   const cells = document.querySelectorAll('.sk-meta[data-assistant]');
   try {
     const res = await fetch(`${ASSISTANT_URL}/healthz`, { method: 'GET' });
     const data = await res.json();
     const p = data?.provider;
+    state.runtime = {
+      kind: p?.kind ?? null,
+      model: p?.model ?? null,
+      tier: p?.tier ?? null,
+      defaultEffort: p?.defaultEffort ?? null,
+      models: Array.isArray(p?.models) ? p.models : [],
+      efforts: Array.isArray(p?.efforts) ? p.efforts : [],
+    };
     cells.forEach((c) => (c.textContent = providerLabel(p)));
     setSkillsAvailability(true);
   } catch {
+    state.runtime = { kind: null, model: null, tier: null, defaultEffort: null, models: [], efforts: [] };
     cells.forEach((c) => (c.textContent = 'assistant · offline'));
     setSkillsAvailability(false);
   }
+}
+
+/* --------------------------------------------- the configuration popover --- */
+
+let cfgFor = null;
+
+function closeCfg() {
+  $('cfg-pop').hidden = true;
+  for (const b of document.querySelectorAll('.sk-cfg')) b.setAttribute('aria-expanded', 'false');
+  cfgFor = null;
+}
+
+/** One option button. A value the runtime cannot run is disabled, struck
+ *  through, and says why — it is never merely styled differently. */
+function cfgOption(part, value, chosen, supported) {
+  const b = document.createElement('button');
+  b.type = 'button';
+  b.className = 'cfg-opt';
+  b.textContent = value;
+  b.disabled = !supported;
+  b.setAttribute('aria-pressed', String(supported && chosen === value));
+  if (!supported) {
+    b.title = `The configured runtime (${providerName(state.runtime.kind)}) cannot run "${value}".`;
+    b.setAttribute('aria-disabled', 'true');
+  }
+  b.onclick = (ev) => {
+    // The grid is rebuilt below, which detaches this button — so the
+    // outside-click listener would no longer recognise it as inside the
+    // popover and would close it. Stop here instead.
+    ev.stopPropagation();
+    if (!supported || !cfgFor) return;
+    // Toggling off returns the card to the runtime's own default rather than
+    // leaving a stale choice behind.
+    const key = cfgKey(cfgFor, part);
+    if (localStorage.getItem(key) === value) localStorage.removeItem(key);
+    else localStorage.setItem(key, value);
+    renderSkillConfigs();
+    openCfg(cfgFor, document.querySelector(`.sk-cfg[data-cfg="${cfgFor}"]`));
+  };
+  return b;
+}
+
+function openCfg(skill, anchor) {
+  if (!anchor || anchor.disabled) return;
+  cfgFor = skill;
+  const pop = $('cfg-pop');
+  const chosen = skillConfig(skill);
+  $('cfg-title').textContent = `/${skill === 'extract' ? 'extract-tasks' : skill} configuration`;
+
+  const models = $('cfg-models');
+  models.textContent = '';
+  for (const m of MODEL_TIERS) {
+    models.append(cfgOption('model', m, chosen.model ?? state.runtime.tier, state.runtime.models.includes(m)));
+  }
+  const efforts = $('cfg-efforts');
+  efforts.textContent = '';
+  for (const e of EFFORT_LEVELS) {
+    efforts.append(
+      cfgOption('effort', e, chosen.effort ?? state.runtime.defaultEffort, state.runtime.efforts.includes(e)),
+    );
+  }
+
+  // The note states what is actually running, and — when options are
+  // unavailable — why. It never implies an unavailable option would work.
+  const unsupportedModels = MODEL_TIERS.filter((m) => !state.runtime.models.includes(m));
+  const unsupportedEfforts = EFFORT_LEVELS.filter((e) => !state.runtime.efforts.includes(e));
+  const parts = [`Running on ${providerName(state.runtime.kind)}.`];
+  if (unsupportedModels.length === MODEL_TIERS.length) {
+    parts.push('This runtime is not a model provider, so no model can be selected.');
+  } else if (unsupportedModels.length) {
+    parts.push(`Unavailable here: ${unsupportedModels.join(', ')}.`);
+  }
+  if (unsupportedEfforts.length === EFFORT_LEVELS.length) {
+    parts.push('It exposes no effort control.');
+  } else if (unsupportedEfforts.length) {
+    parts.push(`Effort unavailable: ${unsupportedEfforts.join(', ')}.`);
+  }
+  $('cfg-note').textContent = parts.join(' ');
+
+  pop.hidden = false;
+  anchor.setAttribute('aria-expanded', 'true');
+  const r = anchor.getBoundingClientRect();
+  const w = pop.offsetWidth;
+  pop.style.left = `${Math.max(8, Math.min(window.innerWidth - w - 8, r.left))}px`;
+  pop.style.top = `${Math.min(window.innerHeight - pop.offsetHeight - 8, r.bottom + 6)}px`;
+}
+
+function wireSkillConfig() {
+  for (const btn of document.querySelectorAll('.sk-cfg')) {
+    btn.addEventListener('click', (ev) => {
+      ev.stopPropagation();
+      if (cfgFor === btn.dataset.cfg) closeCfg();
+      else openCfg(btn.dataset.cfg, btn);
+    });
+  }
+  $('cfg-close').onclick = closeCfg;
+  document.addEventListener('click', (ev) => {
+    if (!cfgFor) return;
+    if ($('cfg-pop').contains(ev.target)) return;
+    if (ev.target.closest?.('.sk-cfg')) return;
+    closeCfg();
+  });
 }
 
 /* ------------------------------------------------- repository (T3.3.1) ----- */
@@ -849,6 +1083,478 @@ async function loadWorker() {
       `${w.delivered} delivered${w.lastDeliveredAt ? `, last ${istStamp(w.lastDeliveredAt)} IST` : ''}.` +
       `${pending}${dead} ${engine}`;
   }
+}
+
+/* ------------------------------------------- artifacts (T3.3-CORRECTION §1) */
+//
+// The command centre's orbit. Every node here is an OUTPUT this system actually
+// produced — a delivered background routine, a CI run, a pull request, an
+// issue, or an object a user kept from an assistant proposal — assembled by the
+// server from records that already existed. The six static capability circles
+// that used to occupy this ring are gone.
+//
+// Nothing is seeded to make the ring look populated. If the sources produced
+// nothing, the orbit renders its own emptiness and the surrounding structure is
+// untouched.
+
+const ARTIFACT_LABEL = {
+  routine: 'Routine output',
+  ci: 'CI run',
+  pull_request: 'Pull request',
+  issue: 'Issue',
+  ai_result: 'AI result',
+};
+
+async function loadArtifacts() {
+  let feed;
+  try {
+    feed = await api('/api/artifacts');
+  } catch (err) {
+    state.artifacts = [];
+    ring.renderArtifacts([]);
+    $('os-tr').textContent =
+      err.status === 401 ? 'NOT AUTHENTICATED' : 'ARTIFACTS UNAVAILABLE';
+    return;
+  }
+  // The label is resolved once, here, so the node, the tooltip and the modal
+  // can never name the same category three different ways.
+  state.artifacts = feed.items.map((a) => ({
+    ...a,
+    categoryLabel: ARTIFACT_LABEL[a.category] ?? a.category,
+  }));
+  ring.renderArtifacts(state.artifacts);
+  state.artifactSources = feed.sources ?? [];
+  renderArtifactReadout();
+}
+
+/**
+ * The readout states what is real: how many outputs, how many are still unread,
+ * and — when a source could not be read — that it could not, with its own
+ * reason. Unread is recomputed from the items in hand rather than carried from
+ * the fetch, so opening an artifact updates the count immediately instead of
+ * leaving a number on screen that the reader has just made false.
+ */
+function renderArtifactReadout() {
+  const broken = (state.artifactSources ?? []).filter((x) => !x.ok);
+  const n = state.artifacts.length;
+  const unread = state.artifacts.filter((a) => a.unread).length;
+  $('os-tr').textContent =
+    `${n} ARTIFACT${n === 1 ? '' : 'S'} · ${unread} UNREAD` +
+    (broken.length ? ` · ${broken.length} SOURCE${broken.length === 1 ? '' : 'S'} UNAVAILABLE` : '');
+  $('os-tr').title = broken.length
+    ? broken.map((b) => `${b.source}: ${b.reason}`).join('\n')
+    : '';
+}
+
+/**
+ * Artifact detail. Everything shown is a field the record carries; a field it
+ * does not carry is not rendered at all. `Open source` appears only when a real
+ * URL exists, and `Open in Second Brain` only when a real internal object is
+ * behind the artifact — so neither action can lead nowhere.
+ */
+function openArtifact(a) {
+  $('af-kind').textContent = a.categoryLabel;
+  $('af-when').textContent = `${fmtDate(a.createdAt)} IST`;
+  $('af-title').textContent = a.title;
+  $('af-ref').textContent = a.id;
+
+  const meta = $('af-meta');
+  meta.textContent = '';
+  const row = (k, v) => {
+    if (v === null || v === undefined || v === '') return;
+    const dt = document.createElement('dt');
+    dt.textContent = k;
+    const dd = document.createElement('dd');
+    dd.textContent = String(v);
+    meta.append(dt, dd);
+  };
+  row('Category', a.categoryLabel);
+  row('Source', a.source);
+  row('Produced', `${fmtDate(a.createdAt)} IST`);
+  row('State', a.state);
+  row('Read', a.unread ? 'unread' : 'read');
+  for (const [k, v] of Object.entries(a.detail ?? {})) row(k, v);
+
+  const src = $('af-source');
+  src.hidden = !a.url;
+  if (a.url) src.onclick = () => window.open(a.url, '_blank', 'noopener,noreferrer');
+
+  const obj = $('af-object');
+  obj.hidden = !a.objectId;
+  if (a.objectId) {
+    obj.onclick = () => {
+      closeArtifact();
+      // Cross-surface identity: the same id the graph, search and the inspector
+      // use, through the one reveal path.
+      goTo(a.objectId);
+    };
+  }
+
+  $('artifact-modal').hidden = false;
+  $('af-close').focus();
+
+  // Opening it IS reading it — recorded for this principal alone.
+  if (a.unread) {
+    ring.markRead(a.id);
+    state.artifacts = state.artifacts.map((x) => (x.id === a.id ? { ...x, unread: false } : x));
+    renderArtifactReadout();
+    api('/api/artifacts/read', { method: 'POST', body: JSON.stringify({ ref: a.id }) }).catch(
+      () => {},
+    );
+  }
+}
+
+function closeArtifact() {
+  $('artifact-modal').hidden = true;
+}
+
+function wireArtifacts() {
+  $('af-close').onclick = closeArtifact;
+  $('artifact-scrim').onclick = closeArtifact;
+}
+
+/* ------------------------------------- attention stack (T3.3-CORRECTION §3) */
+//
+// One triage surface, many sources. Mail is ONE of them, and the items it
+// contributes come only from accounts the CURRENT USER connected — never from
+// another member's mailbox, and never from the workspace head's by virtue of
+// headship.
+//
+// A source that is not configured, not connected or unreadable says which, in
+// words, and contributes nothing. A category count is printed only when the
+// server proved it exact; otherwise the pill shows an em dash.
+
+const INBOUND_ICON = {
+  pull_request: '⑂',
+  ci_failure: '⚠',
+  issue: '◇',
+  message: '✉',
+};
+const SOURCE_STATE_WORD = {
+  connected: 'Connected',
+  not_configured: 'Not configured',
+  not_connected: 'Not connected',
+  unavailable: 'Unavailable',
+};
+
+async function loadInbound() {
+  const tag = $('inbound-state');
+  const rows = $('inbound-rows');
+  const pills = $('inbound-pills');
+  const sources = $('inbound-sources');
+  const empty = $('inbound-empty');
+  if (!rows) return;
+
+  let queue;
+  try {
+    queue = await api('/api/inbound');
+  } catch (err) {
+    tag.textContent = 'Unavailable';
+    tag.className = 'meta tag offline';
+    rows.textContent = '';
+    pills.textContent = '';
+    sources.textContent = '';
+    empty.hidden = false;
+    empty.textContent =
+      err.status === 401
+        ? 'Not authenticated, so no inbound items were requested.'
+        : `The attention stack could not be read: ${err.message}`;
+    return;
+  }
+
+  const n = queue.items.length;
+  tag.textContent = n ? `${n} waiting` : 'Clear';
+  tag.className = `meta tag${n ? ' warn' : ' live'}`;
+
+  pills.textContent = '';
+  for (const c of queue.categories) {
+    const el = document.createElement('span');
+    el.className = `cpill${c.count === null ? ' unknown' : ''}`;
+    const n = document.createElement('span');
+    n.className = 'n';
+    // An unknown total is an absence, never the size of the page in hand.
+    n.textContent = c.count === null ? '—' : String(c.count);
+    el.append(n, document.createTextNode(c.label));
+    if (c.count === null) el.title = 'The source could not prove this total, so none is shown.';
+    pills.append(el);
+  }
+
+  rows.textContent = '';
+  for (const item of queue.items) {
+    const li = document.createElement('li');
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    btn.className = 'ai';
+    btn.disabled = !item.url;
+
+    const t = document.createElement('span');
+    t.className = 't';
+    t.textContent = item.title;
+    const tm = document.createElement('span');
+    tm.className = 'tm';
+    tm.textContent = istStamp(item.at);
+    const m = document.createElement('span');
+    m.className = 'm';
+    const icon = INBOUND_ICON[item.category] ?? '·';
+    m.textContent = item.subtitle ? `${icon} ${item.subtitle}` : icon;
+    btn.append(t, tm, m);
+
+    // Account attribution: an e-mail item names the mailbox it came from, so a
+    // user with several can tell which one is asking for them. Nothing else
+    // about the message is exposed.
+    if (item.sourceAccount) {
+      const acct = document.createElement('span');
+      acct.className = 'acct';
+      acct.textContent = `source · ${item.sourceAccount}`;
+      btn.append(acct);
+    }
+    if (item.url) btn.onclick = () => window.open(item.url, '_blank', 'noopener,noreferrer');
+    li.append(btn);
+    rows.append(li);
+  }
+
+  empty.hidden = n > 0;
+  if (n === 0) {
+    const blocked = queue.sources.filter((x) => x.state === 'unavailable');
+    empty.textContent = blocked.length
+      ? `Nothing to show — ${blocked[0].detail}`
+      : 'Nothing is waiting on you from the connected sources.';
+  }
+
+  sources.textContent = '';
+  for (const src of queue.sources) {
+    const li = document.createElement('li');
+    li.className = src.state === 'connected' ? 'ok' : src.state === 'unavailable' ? 'err' : 'off';
+    const s = document.createElement('span');
+    s.className = 's';
+    s.textContent = `${src.label} · ${SOURCE_STATE_WORD[src.state] ?? src.state}`;
+    const d = document.createElement('span');
+    d.className = 'd';
+    d.textContent = src.detail ?? '';
+    li.append(s, d);
+    sources.append(li);
+  }
+}
+
+/* --------------------------------------- mail accounts (T3.3-CORRECTION §4) */
+//
+// Per-user mail. This panel shows the accounts of the person whose credential
+// is in force, and nothing else: the server filters by principal, so there is
+// no request this page could make that would return someone else's mailbox.
+//
+// Authentication happens AT THE PROVIDER. There is no password field on this
+// surface and nowhere for one to go: pressing Add opens the provider's own
+// consent screen, and the grant comes back to the server, which seals it before
+// storing it. A provider this deployment has not been configured for is offered
+// as unavailable WITH the reason, never as a button that fails afterwards.
+
+const MAIL_STATUS_WORD = {
+  pending: 'Awaiting consent',
+  connected: 'Connected',
+  expired: 'Authorization expired',
+  revoked: 'Access revoked',
+  error: 'Last read failed',
+};
+
+function openSettings() {
+  $('settings').hidden = false;
+  $('t-settings').setAttribute('aria-expanded', 'true');
+  loadMail();
+  renderSettingsIdentity();
+  $('settings-close').focus();
+}
+
+function closeSettings() {
+  $('settings').hidden = true;
+  $('t-settings').setAttribute('aria-expanded', 'false');
+}
+
+/** Who you are, and who heads this workspace — the two, stated separately. */
+function renderSettingsIdentity() {
+  const host = $('settings-identity');
+  if (!host) return;
+  host.textContent = '';
+  const me = state.me;
+  const row = (k, v) => {
+    const li = document.createElement('li');
+    const kk = document.createElement('span');
+    kk.className = 'k';
+    kk.textContent = k;
+    const vv = document.createElement('span');
+    vv.className = 'v';
+    vv.textContent = v;
+    li.append(kk, vv);
+    host.append(li);
+  };
+  row('Signed in as', me?.displayName ?? 'not authenticated');
+  row('Principal', me?.principalId ?? '—');
+  row('Your role', me?.role === 'owner' ? 'workspace head' : (me?.role ?? '—'));
+  row('Workspace', me?.workspace?.name ?? '—');
+  // Headship is read from the membership that carries the owner role. A
+  // workspace with none says so rather than naming a likely candidate.
+  row('Workspace head', me?.workspace?.head?.displayName ?? 'not recorded');
+  $('settings-who').textContent = me?.displayName ?? '—';
+}
+
+async function loadMail() {
+  const host = $('mail-accounts');
+  const note = $('mail-note');
+  const providers = $('mail-providers');
+  if (!host) return;
+  try {
+    state.mail = await api('/api/mail/accounts');
+  } catch (err) {
+    host.textContent = '';
+    note.textContent =
+      err.status === 401
+        ? 'Not authenticated, so no mail accounts were requested.'
+        : `Mail accounts could not be read: ${err.message}`;
+    providers.textContent = '';
+    return;
+  }
+
+  const { accounts, providers: list, storage } = state.mail;
+  note.textContent = storage.ok
+    ? `${accounts.length} account${accounts.length === 1 ? '' : 's'} connected to your user. They are visible only to you.`
+    : storage.reason;
+
+  host.textContent = '';
+  if (accounts.length === 0) {
+    const li = document.createElement('li');
+    li.className = 'mail-empty';
+    li.textContent = 'No mail account is connected to your user.';
+    host.append(li);
+  }
+  for (const a of accounts) {
+    host.append(mailCard(a));
+  }
+
+  providers.textContent = '';
+  for (const p of list) {
+    const b = document.createElement('button');
+    b.type = 'button';
+    b.className = 'pill ghost sm';
+    b.textContent = `+ ${p.label}`;
+    const blocked = !p.configured || !storage.ok;
+    b.disabled = blocked;
+    // Executability is a state here too: a provider that cannot complete its
+    // flow says why instead of failing after the user has pressed it.
+    b.title = blocked ? (p.reason ?? storage.reason ?? 'unavailable') : `Scopes: ${p.scopes.join(', ')}`;
+    b.onclick = () => connectMail(p.id);
+    providers.append(b);
+  }
+  if (list.every((p) => !p.configured)) {
+    const s = document.createElement('span');
+    s.className = 'mail-empty';
+    s.textContent = 'No mail provider is configured for this deployment.';
+    providers.append(s);
+  }
+}
+
+function mailCard(a) {
+  const li = document.createElement('li');
+  const card = document.createElement('div');
+  card.className = 'mail-card';
+
+  const addr = document.createElement('span');
+  addr.className = 'addr';
+  addr.textContent = a.address;
+
+  const st = document.createElement('span');
+  st.className = `st ${a.status}`;
+  st.textContent =
+    `${MAIL_STATUS_WORD[a.status] ?? a.status} · ${a.provider}` +
+    (a.lastSyncAt ? ` · last sync ${istStamp(a.lastSyncAt)}` : ' · never synced');
+  card.append(addr, st);
+
+  // The provider's own words for a failure — never a stack trace, never hidden.
+  if (a.lastError) {
+    const why = document.createElement('span');
+    why.className = 'why';
+    why.textContent = a.lastError;
+    card.append(why);
+  }
+
+  const row = document.createElement('div');
+  row.className = 'row';
+
+  const reconnect = document.createElement('button');
+  reconnect.type = 'button';
+  reconnect.className = 'pill ghost sm';
+  reconnect.textContent = a.status === 'connected' ? 'Reconnect' : 'Reconnect now';
+  reconnect.onclick = () => connectMail(a.provider, a.id);
+
+  const disconnect = document.createElement('button');
+  disconnect.type = 'button';
+  disconnect.className = 'pill ghost sm';
+  disconnect.textContent = 'Disconnect';
+  disconnect.onclick = async () => {
+    disconnect.disabled = true;
+    try {
+      await api(`/api/mail/accounts/${a.id}`, { method: 'DELETE' });
+      await loadMail();
+      loadInbound();
+    } catch (err) {
+      disconnect.disabled = false;
+      $('mail-note').textContent = `Not disconnected: ${err.message}`;
+    }
+  };
+
+  // Which accounts feed the queue is per account, per user.
+  const feeds = document.createElement('label');
+  feeds.className = 'feeds';
+  const cb = document.createElement('input');
+  cb.type = 'checkbox';
+  cb.checked = a.feedsInbound;
+  cb.onchange = async () => {
+    try {
+      await api(`/api/mail/accounts/${a.id}`, {
+        method: 'PATCH',
+        body: JSON.stringify({ feedsInbound: cb.checked }),
+      });
+      loadInbound();
+    } catch (err) {
+      cb.checked = !cb.checked;
+      $('mail-note').textContent = `Not changed: ${err.message}`;
+    }
+  };
+  feeds.append(cb, document.createTextNode('feeds queue'));
+
+  row.append(reconnect, disconnect, feeds);
+  card.append(row);
+  li.append(card);
+  return li;
+}
+
+/**
+ * Start a connection. The browser is sent to the PROVIDER's consent screen —
+ * this application never sees the user's mail password, and the popup returns
+ * to a server route that completes the exchange server-side.
+ */
+async function connectMail(provider, accountId = null) {
+  try {
+    const { authorizationUrl } = await api('/api/mail/accounts', {
+      method: 'POST',
+      body: JSON.stringify({ provider, accountId }),
+    });
+    window.open(authorizationUrl, 'devworkspace-mail', 'width=520,height=680');
+  } catch (err) {
+    $('mail-note').textContent = `Could not start: ${err.message}`;
+  }
+}
+
+function wireMail() {
+  $('t-settings').onclick = () => ($('settings').hidden ? openSettings() : closeSettings());
+  $('settings-close').onclick = closeSettings;
+  $('inbound-mail').onclick = openSettings;
+  // The consent window tells us it finished; the accounts themselves are then
+  // re-read FROM THE SERVER — no credential ever crosses this boundary.
+  window.addEventListener('message', (ev) => {
+    if (ev.origin !== window.location.origin) return;
+    if (ev.data?.type !== 'devworkspace:mail') return;
+    loadMail();
+    loadInbound();
+  });
 }
 
 function closeInspector() {
@@ -1590,6 +2296,9 @@ function taskProposalRow(proposal, fallbackProjectId) {
       openTask.onclick = () => goTo(task.id);
       row.append(done, openTask);
       await loadGraph();
+      // A kept assistant proposal IS an artifact — the orbit gains it because
+      // the object now exists, not because anything was seeded.
+      loadArtifacts();
       view.setMatches([task.id]);
     } catch (err) {
       create.disabled = false;
@@ -1608,7 +2317,7 @@ function taskProposalRow(proposal, fallbackProjectId) {
  * actually succeeded or actually failed, rather than returning to rest and
  * leaving the user to assume it worked.
  */
-async function runAsk(question) {
+async function runAsk(question, skillId = null) {
   if (state.ask.busy) return { ok: false, detail: 'already running' };
   const q = String(question ?? '').trim();
   if (!q) {
@@ -1628,7 +2337,16 @@ async function runAsk(question) {
         // validates it and derives the principal (INV-4a).
         authorization: `Dev ${state.principalId}`,
       },
-      body: JSON.stringify({ question: q, targetId: state.selected?.node?.id ?? null }),
+      // The configuration the card is displaying is the configuration that is
+      // sent. Nothing is sent that the runtime did not report as supported —
+      // and the pipeline validates it again on arrival, so an unsupported
+      // combination fails as a failure rather than silently running something
+      // else (T3.3-CORRECTION §5.1).
+      body: JSON.stringify({
+        question: q,
+        targetId: state.selected?.node?.id ?? null,
+        ...(skillId ? skillConfig(skillId) : {}),
+      }),
     });
     const data = await res.json();
     if (!data.ok) {
@@ -1644,9 +2362,18 @@ async function runAsk(question) {
     renderAsk(data);
     // Same naming as the Skills cards: a development stub is called a
     // development stub, never dressed up as a model (T3.2 §8).
-    setAskStatus(`${data.intent} · ${providerName(data.provider)}`, 'ok');
+    // What ACTUALLY ran, echoed by the pipeline — not what was requested.
+    const ran = data.configuration
+      ? [data.configuration.tier ?? data.configuration.model, data.configuration.effort]
+          .filter(Boolean)
+          .join(' · ')
+      : '';
+    setAskStatus(
+      `${data.intent} · ${providerName(data.provider)}${ran ? ` · ${ran}` : ''}`,
+      'ok',
+    );
     $('ask-provider').textContent =
-      `${providerName(data.provider).toUpperCase()} · ${data.weightSetVersion}`;
+      `${providerName(data.provider).toUpperCase()}${ran ? ` · ${ran.toUpperCase()}` : ''} · ${data.weightSetVersion}`;
     // The note names what the run actually produced — grounded in real evidence,
     // or an answer with none. It never reports "done" for an ungrounded answer
     // as though it were the same result.
@@ -1776,10 +2503,39 @@ function renderPrincipalOptions() {
   }
 }
 
-/** The identity actually in force, as the SERVER reported it. */
+/**
+ * The two identities, as the SERVER reported them (T3.3-CORRECTION).
+ *
+ * They are DIFFERENT facts and the header states both:
+ *   • the workspace HEAD — the member whose membership carries the `owner`
+ *     role, which for DEVWORKSPACE is Dev;
+ *   • YOU — whoever the presented credential resolves to, which changes when
+ *     the principal does.
+ *
+ * Neither is hardcoded here. A workspace with no recorded head renders an
+ * absence rather than a guess, and an unauthenticated session says so.
+ */
 function renderIdentity() {
-  const name = state.me?.displayName ?? null;
-  $('brand-id').textContent = name ? `${name} | Workspace` : 'Not authenticated';
+  const me = state.me;
+  const name = me?.displayName ?? null;
+  const workspace = me?.workspace?.name ?? null;
+  const isHead = me?.isWorkspaceHead === true;
+
+  // The wordmark already names the product. The identity line under it repeats
+  // the workspace name only when the workspace is not the product itself.
+  $('brand-id').textContent = !name
+    ? 'Not authenticated'
+    : workspace && workspace.toUpperCase() !== 'DEVWORKSPACE'
+      ? workspace
+      : '';
+
+  $('ident-head').textContent = me?.workspace?.head?.displayName ?? '—';
+  $('ident-you').textContent = name ?? '—';
+  // When you ARE the head, those are one person, and printing the same name
+  // twice would read as two. State it once, with the role attached.
+  $('ident').querySelector('.who.head').hidden = isHead;
+  $('ident-role').textContent = isHead ? '· workspace head' : '';
+  renderSettingsIdentity();
 }
 
 /**
@@ -1802,13 +2558,25 @@ function wirePrincipal() {
   renderPrincipalOptions();
   sel.onchange = async () => {
     state.principalId = sel.value;
-    localStorage.setItem('dc.principalId', state.principalId);
+    localStorage.setItem(PRINCIPAL_KEY, state.principalId);
     state.selected = null;
     view.select(null);
     // Everything scoped to a principal is re-read together, so no panel can be
-    // left showing the previous identity's data.
+    // left showing the previous identity's data — including the mail accounts,
+    // which are per user and must never survive a switch.
+    state.mail = { storage: { ok: false, reason: null }, providers: [], accounts: [] };
+    state.artifacts = [];
+    ring.renderArtifacts([]);
     await loadMe();
-    await Promise.all([loadGraph({ keepSelection: false }), loadRepository(), loadWorker()]);
+    await Promise.all([
+      loadMembers(),
+      loadGraph({ keepSelection: false }),
+      loadRepository(),
+      loadWorker(),
+      loadArtifacts(),
+      loadInbound(),
+      loadMail(),
+    ]);
   };
 }
 
@@ -1861,8 +2629,10 @@ function wireCapture() {
       await loadGraph();
       // A capture writes a real outbox event in the same transaction, so the
       // Routines surface has genuinely changed and is re-read rather than left
-      // showing a stale queue.
+      // showing a stale queue — and once the worker delivers that event, it
+      // becomes a real artifact, so the orbit is re-read with it.
       loadWorker();
+      loadArtifacts();
       // CAPTURE → CONNECT: the new object appears in the graph, already anchored.
       // Reported after the reload, which repaints the inspector.
       if (note?.id) view.setMatches([note.id]);
@@ -1911,6 +2681,20 @@ function wireChrome() {
   document.addEventListener('keydown', (e) => {
     const typing = /input|textarea|select/i.test(document.activeElement?.tagName || '');
     if (e.key === 'Escape') {
+      // Innermost surface first: a popover, then a modal, then the settings
+      // panel, then search, then the inspector, then the place itself.
+      if (!$('cfg-pop').hidden) {
+        closeCfg();
+        return;
+      }
+      if (!$('artifact-modal').hidden) {
+        closeArtifact();
+        return;
+      }
+      if (!$('settings').hidden) {
+        closeSettings();
+        return;
+      }
       if (!$('spotlight').hidden) {
         closeSpotlight();
         return;
@@ -2084,23 +2868,19 @@ async function loadMembers() {
 // summarize / extract actions — so nothing here claims an executable the
 // backend does not have. They run against the current selection scope.
 function wireWorkflows() {
-  // One runner for all three invocation surfaces — the command ring, the
-  // Second Brain's inner ring and these cards — so a capability cannot behave
-  // differently depending on where it was pressed.
-  const run = {
-    'flow-capture': 'capture',
-    'flow-ask': 'ask',
-    'flow-summarize': 'summarize',
-    'flow-extract': 'extract',
-  };
-  for (const [id, capability] of Object.entries(run)) {
+  // One runner for both invocation surfaces — the Second Brain's inner ring
+  // and these cards — so a skill cannot behave differently depending on where
+  // it was pressed.
+  for (const [id, capability] of Object.entries(SKILL_BY_CARD)) {
     const e = $(id);
     if (!e) continue;
-    e.addEventListener('click', async () => {
+    e.addEventListener('click', async (ev) => {
       // A disabled card must actually refuse, not merely look disabled.
       if (e.getAttribute('aria-disabled') === 'true') return;
       document.body.classList.remove('drawer-left', 'drawer-right');
 
+      // Pressing the configuration control is not pressing the card.
+      if (ev.target.closest?.('.sk-cfg')) return;
       const slot = e.querySelector('[data-state]');
       // Only a capability that genuinely executes gets a running state. Opening
       // a panel is reported as opening a panel — timing it would dress
@@ -2108,7 +2888,7 @@ function wireWorkflows() {
       const willRun = capability === 'summarize' || capability === 'extract';
       const reporter = willRun ? skillRun(id) : null;
       try {
-        const outcome = await runCapability(capability);
+        const outcome = await runSkill(capability);
         if (reporter) {
           if (outcome?.ok) reporter.ok(outcome.note ?? 'done');
           else reporter.fail(outcome?.detail ?? 'no result');
@@ -2141,6 +2921,9 @@ wireSearch();
 wireSpotlight();
 wireCapture();
 wireWorkflows();
+wireSkillConfig();
+wireArtifacts();
+wireMail();
 wireChrome();
 startClock();
 // Assistant-backed Skills start disabled and are enabled only once the service
@@ -2153,3 +2936,8 @@ loadMembers();
 loadGraph({ keepSelection: false });
 loadRepository();
 loadWorker();
+// The artifact orbit and the attention stack are separate reads: they are
+// produced by systems the graph knows nothing about, and each states its own
+// availability rather than inheriting the graph's.
+loadArtifacts();
+loadInbound();

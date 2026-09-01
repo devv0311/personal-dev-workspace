@@ -9,7 +9,13 @@
 // It never invents a ref: it only ever cites evidence it was actually handed,
 // which is precisely the behaviour the pipeline then re-validates.
 
-import type { LLMProvider, LlmRequest, LlmResult, LlmProposedTask } from '../ports/llm.ts';
+import type {
+  LLMProvider,
+  LlmCapabilities,
+  LlmRequest,
+  LlmResult,
+  LlmProposedTask,
+} from '../ports/llm.ts';
 
 /** Sentences that read like an action, used for deterministic task extraction. */
 const ACTION_HINTS = [
@@ -43,6 +49,23 @@ export function makeFakeLLMProvider(): LLMProvider {
   return {
     async complete(request: LlmRequest): Promise<LlmResult> {
       const { evidence, question, task } = request;
+
+      // MODEL / EFFORT (T3.3-CORRECTION). This provider is a deterministic
+      // development stub, not a model: it has no tier and no effort control,
+      // it declares both lists empty, and it REFUSES a request naming either
+      // rather than accepting the parameter and ignoring it. Accepting it
+      // silently is exactly how a card comes to display a model that is not
+      // running.
+      if (request.model) {
+        throw new Error(
+          `The configured runtime is a development stub and cannot run "${request.model}". Configure a model provider to select a model.`,
+        );
+      }
+      if (request.effort) {
+        throw new Error(
+          'The configured runtime is a development stub and exposes no effort control.',
+        );
+      }
 
       // No evidence ⇒ no answer. The fake refuses exactly where a correctly
       // prompted real model must refuse (P2.3 §7, §10).
@@ -116,8 +139,17 @@ export function makeFakeLLMProvider(): LLMProvider {
       };
     },
 
-    describe() {
-      return { kind: 'fake', model: 'deterministic-fake-1' };
+    describe(): LlmCapabilities {
+      // Empty lists are the honest answer, and the UI renders them as "no
+      // control here" — never as "every option is available".
+      return {
+        kind: 'fake',
+        model: 'deterministic-fake-1',
+        tier: null,
+        defaultEffort: null,
+        models: [],
+        efforts: [],
+      };
     },
   };
 }

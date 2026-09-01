@@ -587,37 +587,60 @@ export function zoomAbout(transform, factor, anchor) {
   };
 }
 
+
 /* ============================================================================
-   T3.2 — RING SYSTEM (pure)
+   T3.3-CORRECTION — THE RADIAL SECTOR TREE (pure)
 
-   Two ring compositions share this module so the OS command centre and the
-   Second Brain cannot disagree about geometry or about what a ring means:
+   WHAT THIS REPLACES. The Second Brain used to be concentric rings BY DATA
+   TYPE — CAPABILITIES / INBOX / PROJECTS / CONTEXT, one ring per kind of thing.
+   That geometry says "here are four categories"; it does not say what belongs
+   to what. The correction is not a rename: the ring-per-type model is gone and
+   the map is now a radial tree whose geometry carries the hierarchy.
 
-     • the COMMAND RING — the workspace's real, invocable capabilities laid on
-       one track around the core;
-     • the SECOND BRAIN — concentric rings over the SAME objects the graph,
-       the inspector, search and the rails already hold.
+                             WORKSPACE
+                                 │
+                          router / hub
+                                 │
+                 ┌───────────────┼───────────────┐
+              SKILLS          PROJECTS          ...
+                                 │
+                        angular sectors θᵢ
+                                 │
+                          context spokes
 
-   Nothing here invents an object. `CAPABILITIES` names capabilities the
-   product actually has and each one points at a handler the shell already
-   wires; the ring layouts only place real payload nodes.
+     CENTRE   the workspace router hub
+     RING 1   executable skills — what this workspace can DO
+     RING 2   one real project per angular sector θᵢ
+     RING 3   that project's own context, fanning outward ALONG ITS OWN RAY
+
+   Two consequences the layout must guarantee, and which the tests pin:
+
+     • A context object is inside its parent's angular sector, always. Nothing
+       is scattered around a shared circle, and there is no force-directed
+       spiderweb: position states parentage.
+     • Only REAL objects are placed. Skills are drawn by the view and never
+       enter this layout, the hub is the workspace's own node, and an empty
+       workspace produces an empty map rather than a padded one.
    ========================================================================== */
 
 /**
- * The workspace's real capabilities. Each entry maps to a handler that already
- * exists in the shell — the capture form, the P3.4 assistant and its summarize
- * / extract actions, the graph's own relationship reveal, and spatial search.
- * Nothing is listed here that the product cannot do; the ring is sized by this
- * list, never padded to match the reference's badge count.
+ * The workspace's real, executable skills — the same four the Skills Deck runs
+ * and the same four the assistant/core actually implement.
+ *
+ * This list is deliberately SHORTER than the six circles it replaces on the
+ * command view. `Connect` and `Search` were not skills: they were the map's own
+ * selection gesture and the spotlight, already reachable from the rails, dressed
+ * up as runnable commands. Nothing is listed here that the product cannot run,
+ * and the ring is sized by this list rather than padded to fill a circle.
  */
-export const CAPABILITIES = [
+export const SKILLS = [
   {
     id: 'capture',
     command: '/capture',
     label: 'Capture',
     glyph: '＋',
     description: 'Save a note into the focused project',
-    kind: 'core',
+    engine: 'core',
   },
   {
     id: 'ask',
@@ -625,7 +648,7 @@ export const CAPABILITIES = [
     label: 'Ask',
     glyph: '✧',
     description: 'Answer from your context, grounded in real objects',
-    kind: 'assistant',
+    engine: 'assistant',
   },
   {
     id: 'summarize',
@@ -633,7 +656,7 @@ export const CAPABILITIES = [
     label: 'Summarize',
     glyph: '≡',
     description: 'Condense the current scope',
-    kind: 'assistant',
+    engine: 'assistant',
   },
   {
     id: 'extract',
@@ -641,35 +664,14 @@ export const CAPABILITIES = [
     label: 'Extract Tasks',
     glyph: '☑',
     description: 'Pull action items from the current scope',
-    kind: 'assistant',
-  },
-  {
-    id: 'connect',
-    command: 'connect',
-    label: 'Connect',
-    glyph: '⁘',
-    description: 'Reveal what the selected object touches',
-    kind: 'core',
-  },
-  {
-    id: 'search',
-    command: 'search',
-    label: 'Search',
-    glyph: '⌕',
-    description: 'Find any object without losing its place',
-    kind: 'core',
+    engine: 'assistant',
   },
 ];
 
 /**
- * Semantic ring colour classes (T3.2 §6). Colour REINFORCES a class that is
- * always also stated in words — the node's own label, the ring annotation and
- * the inspector all name it — so nothing depends on hue alone (§4.13).
- *
- *   action   → the core and its capabilities      (orange)
- *   domain   → projects: the workspace's domains  (cyan)
- *   temporal → tasks: dated, actionable work      (amber)
- *   memory   → captured context                   (purple)
+ * Semantic classes (T3.2 §6). Colour REINFORCES a class that is always also
+ * stated in words — the node's own label, the sector label and the inspector
+ * all name it — so nothing depends on hue alone (§4.13).
  */
 export const SEMANTIC_BY_TYPE = {
   workspace: 'action',
@@ -686,22 +688,27 @@ export const semanticClassOf = (node) =>
   node?.kind === 'workspace' ? 'action' : (SEMANTIC_BY_TYPE[node?.type] ?? 'memory');
 
 /**
- * Second Brain geometry. Radii are in the same 1000×1000 user space the graph
- * already uses, so the two views share one coordinate system.
+ * Sector-tree geometry, in the same 1000×1000 user space the wedge layout uses,
+ * so the two projections share one coordinate system and one object identity.
  */
-export const BRAIN_GEO = {
+export const SECTOR_GEO = {
   CX: 500,
   CY: 500,
-  R_CAP: 140, // capability ring (drawn by the view, not a payload node)
-  R_INBOX: 196, // objects with no home project
-  R_DOMAIN: 252, // projects — the context / domain ring
-  R_MEM: 320, // first memory ring
-  MEM_STEP: 40,
-  MEM_RINGS: 3,
-  R_BOUND: 436, // outer system boundary
+  R_HUB: 58, // the router hub's own mark
+  R_SKILL: 138, // ring 1 — executable skills (drawn by the view)
+  R_PROJECT: 248, // ring 2 — project sector nodes
+  R_CTX: 320, // ring 3 — first context ring
+  CTX_STEP: 40,
+  CTX_RINGS: 3,
+  R_BOUND: 448, // outer system boundary
   START: -Math.PI / 2,
-  SECTOR: 0.86, // fraction of a project's angular share its context may use
+  /** Fraction of a sector's angular share its context may occupy. < 1 so the
+   *  gutter between two sectors stays visibly empty and parentage stays legible. */
+  FILL: 0.74,
 };
+
+/** The id of the sector that holds objects with no home project. */
+export const UNFILED_SECTOR = 'unfiled';
 
 /** Evenly spaced points on one ring. Shared by both ring compositions. */
 export function ringPoints(count, radius, { cx = 500, cy = 500, start = -Math.PI / 2 } = {}) {
@@ -719,117 +726,181 @@ export function ringPoints(count, radius, { cx = 500, cy = 500, start = -Math.PI
   return out;
 }
 
-/**
- * Concentric-ring projection of the SAME graph payload the wedge layout draws.
- *
- *   CORE          the workspace root
- *   DOMAIN RING   projects, evenly spaced
- *   MEMORY RINGS  each project's captured context, filling outward inside that
- *                 project's own angular sector, ring by ring
- *   INBOX RING    context with no home project, on a tight inner ring
- *
- * Deterministic: same payload ⇒ same positions, so nothing reshuffles between
- * renders, and a node keeps its place while search attenuates around it.
- */
-export function layoutSecondBrain(graph, index = buildIndex(graph)) {
-  const pos = new Map();
-  const { CX, CY, R_INBOX, R_DOMAIN, R_MEM, MEM_STEP, MEM_RINGS, START, SECTOR } = BRAIN_GEO;
-
-  if (index.rootId) pos.set(index.rootId, { x: CX, y: CY, r: 30, angle: 0, radius: 0, band: 'core' });
-
-  const projects = [...index.nodes.values()]
+/** Deterministic project order — the order sectors are laid out in. */
+function orderedProjects(index) {
+  return [...index.nodes.values()]
     .filter((n) => n.type === 'project')
     .sort(
       (a, b) => String(a.createdAt).localeCompare(String(b.createdAt)) || a.id.localeCompare(b.id),
     );
+}
 
-  const share = (Math.PI * 2) / Math.max(projects.length, 1);
-  projects.forEach((p, i) => {
-    // Offset by half a sector so the 12 o'clock radial is a sector BOUNDARY,
-    // never a project. That keeps one clear gutter for the ring annotations.
-    const angle = START + (i + 0.5) * share;
-    pos.set(p.id, {
-      x: CX + Math.cos(angle) * R_DOMAIN,
-      y: CY + Math.sin(angle) * R_DOMAIN,
-      r: metaFor('project').r,
-      angle,
-      radius: R_DOMAIN,
-      band: 'domain',
+/** A project's own context, oldest first. Projects never nest under projects. */
+function contextOf(index, projectId) {
+  return (index.childrenOf.get(projectId) ?? [])
+    .filter((id) => index.nodes.get(id)?.type !== 'project')
+    .sort((a, b) => {
+      const na = index.nodes.get(a);
+      const nb = index.nodes.get(b);
+      return String(na.createdAt).localeCompare(String(nb.createdAt)) || a.localeCompare(b);
     });
+}
 
-    const kids = (index.childrenOf.get(p.id) ?? [])
-      .filter((id) => index.nodes.get(id)?.type !== 'project')
-      .sort((a, b) => {
-        const na = index.nodes.get(a);
-        const nb = index.nodes.get(b);
-        return String(na.createdAt).localeCompare(String(nb.createdAt)) || a.localeCompare(b);
+/** Objects anchored straight to the root — no home project. */
+function unfiledOf(index) {
+  return (index.childrenOf.get(index.rootId) ?? [])
+    .filter((id) => index.nodes.get(id)?.type !== 'project')
+    .sort((a, b) => {
+      const na = index.nodes.get(a);
+      const nb = index.nodes.get(b);
+      return String(na.createdAt).localeCompare(String(nb.createdAt)) || a.localeCompare(b);
+    });
+}
+
+/**
+ * The angular sectors of the tree, derived from the objects that actually
+ * exist.
+ *
+ * One sector per real project, plus — only when the workspace genuinely holds
+ * objects with no home project — one sector for those. The unfiled sector has
+ * no ring-2 node, because there is no project object to draw: it is labelled on
+ * its ray and carries its real context, which is the truthful shape rather than
+ * a placeholder project.
+ *
+ * Each sector reports its own angular span, so the view can draw the dividers
+ * and so focus can be tested without a browser.
+ */
+export function sectorsOf(graph, index = buildIndex(graph)) {
+  const projects = orderedProjects(index);
+  const unfiled = unfiledOf(index);
+  const descriptors = projects.map((p) => ({
+    id: p.id,
+    kind: 'project',
+    nodeId: p.id,
+    title: p.title,
+    contextIds: contextOf(index, p.id),
+  }));
+  if (unfiled.length > 0) {
+    descriptors.push({
+      id: UNFILED_SECTOR,
+      kind: 'unfiled',
+      nodeId: null,
+      title: 'Unfiled',
+      contextIds: unfiled,
+    });
+  }
+
+  const share = (Math.PI * 2) / Math.max(descriptors.length, 1);
+  return descriptors.map((d, i) => {
+    // Offset by half a share so 12 o'clock is a sector BOUNDARY, never a
+    // sector's own ray — that keeps one clear vertical gutter for annotation.
+    const angle = SECTOR_GEO.START + (i + 0.5) * share;
+    return {
+      ...d,
+      index: i,
+      angle,
+      start: SECTOR_GEO.START + i * share,
+      end: SECTOR_GEO.START + (i + 1) * share,
+      share,
+      count: d.contextIds.length,
+    };
+  });
+}
+
+/**
+ * Lay the whole tree out. Returns Map<nodeId, {x, y, r, angle, radius, band,
+ * sectorId}>. Deterministic: same payload ⇒ same positions, so nothing
+ * reshuffles between renders and a node keeps its place while focus or search
+ * attenuates around it.
+ */
+export function layoutSectorTree(graph, index = buildIndex(graph)) {
+  const pos = new Map();
+  const { CX, CY, R_PROJECT, R_CTX, CTX_STEP, CTX_RINGS, FILL } = SECTOR_GEO;
+
+  if (index.rootId) {
+    pos.set(index.rootId, { x: CX, y: CY, r: 30, angle: 0, radius: 0, band: 'core', sectorId: null });
+  }
+
+  for (const sector of sectorsOf(graph, index)) {
+    if (sector.nodeId) {
+      pos.set(sector.nodeId, {
+        x: CX + Math.cos(sector.angle) * R_PROJECT,
+        y: CY + Math.sin(sector.angle) * R_PROJECT,
+        r: metaFor('project').r,
+        angle: sector.angle,
+        radius: R_PROJECT,
+        band: 'project',
+        sectorId: sector.id,
       });
+    }
 
-    // Fill ring by ring, so an outer ring is only reached once the ones inside
-    // it are full — the reference's "rings fill outward" reading.
-    const perRing = Math.max(3, Math.ceil(kids.length / MEM_RINGS));
+    // Context fans OUTWARD along this sector's own ray, ring by ring, so an
+    // outer ring is only reached once the ones inside it are full.
+    const kids = sector.contextIds;
+    const perRing = Math.max(3, Math.ceil(kids.length / CTX_RINGS));
+    const spread = sector.share * FILL;
     kids.forEach((id, k) => {
       const ring = Math.floor(k / perRing);
       const slot = k % perRing;
       const inRing = Math.min(perRing, kids.length - ring * perRing);
-      const spread = share * SECTOR;
-      const a = angle + ((slot + 0.5) / inRing - 0.5) * spread;
-      const radius = R_MEM + ring * MEM_STEP + (hash01(id) - 0.5) * 6;
+      const a = sector.angle + ((slot + 0.5) / inRing - 0.5) * spread;
+      const radius = R_CTX + ring * CTX_STEP + (hash01(id) - 0.5) * 6;
       pos.set(id, {
         x: CX + Math.cos(a) * radius,
         y: CY + Math.sin(a) * radius,
         r: metaFor(index.nodes.get(id).type).r,
         angle: a,
         radius,
-        band: 'memory',
+        band: 'context',
+        sectorId: sector.id,
       });
     });
-  });
-
-  const orphans = (index.childrenOf.get(index.rootId) ?? []).filter(
-    (id) => index.nodes.get(id)?.type !== 'project' && !pos.has(id),
-  );
-  orphans.forEach((id, i) => {
-    const a = START + ((i + 0.5) / Math.max(orphans.length, 1)) * Math.PI * 2;
-    pos.set(id, {
-      x: CX + Math.cos(a) * R_INBOX,
-      y: CY + Math.sin(a) * R_INBOX,
-      r: metaFor(index.nodes.get(id).type).r,
-      angle: a,
-      radius: R_INBOX,
-      band: 'inbox',
-    });
-  });
+  }
 
   return pos;
 }
 
 /**
- * The ring structure to annotate, derived from what the payload actually
- * contains. A ring the workspace has nothing on is reported with a zero count
- * rather than being hidden or filled — the map states its own emptiness.
+ * Which sector a node belongs to: a project's own sector, a context object's
+ * parent sector, or null for the hub.
+ *
+ * One map, built from the layout, so the view, focus and any keyboard path all
+ * answer "what branch is this?" the same way.
  */
-export function brainRings(graph, index = buildIndex(graph)) {
-  const { R_CAP, R_INBOX, R_DOMAIN, R_MEM, MEM_STEP, R_BOUND } = BRAIN_GEO;
-  const nodes = [...index.nodes.values()];
-  const count = (fn) => nodes.filter(fn).length;
-  const memory = count((n) => n.layer === 'memory' && n.homeProjectId);
-  const inbox = count((n) => n.kind !== 'workspace' && !n.homeProjectId && n.type !== 'project');
-  const memRings = Math.max(
-    1,
-    Math.ceil(memory / Math.max(1, count((n) => n.type === 'project') * 3)),
-  );
-  return [
-    { key: 'capability', label: 'Capabilities', radius: R_CAP, count: CAPABILITIES.length, semantic: 'action' },
-    { key: 'inbox', label: 'Inbox', radius: R_INBOX, count: inbox, semantic: 'memory' },
-    { key: 'domain', label: 'Projects', radius: R_DOMAIN, count: count((n) => n.type === 'project'), semantic: 'domain' },
-    ...Array.from({ length: Math.min(BRAIN_GEO.MEM_RINGS, memRings) }, (_, i) => ({
-      key: `memory-${i}`,
-      label: i === 0 ? 'Context' : '',
-      radius: R_MEM + i * MEM_STEP,
-      count: i === 0 ? memory : 0,
-      semantic: 'memory',
-    })),
-    { key: 'boundary', label: 'System boundary', radius: R_BOUND, count: nodes.length, semantic: 'boundary' },
-  ];
+export function sectorIndexOf(pos) {
+  const bySector = new Map();
+  for (const [id, at] of pos) {
+    if (!at.sectorId) continue;
+    if (!bySector.has(at.sectorId)) bySector.set(at.sectorId, new Set());
+    bySector.get(at.sectorId).add(id);
+  }
+  return bySector;
+}
+
+/**
+ * SECTOR FOCUS (T3.3-CORRECTION §2.3).
+ *
+ * Everything in the focused branch stays fully visible — the project, its
+ * context, and anything either of them is genuinely related to — and every
+ * other branch is dimmed. The related set is computed from REAL edges: nothing
+ * is added to a focus because it looks nearby.
+ *
+ * Returns the set of node ids that must stay lit. The hub is always in it: the
+ * root of the tree is not an unrelated branch.
+ */
+export function sectorFocusSet(index, pos, sectorId) {
+  const lit = new Set();
+  if (!sectorId) return lit;
+  const bySector = sectorIndexOf(pos);
+  const members = bySector.get(sectorId);
+  if (!members) return lit;
+  for (const id of members) lit.add(id);
+  if (index.rootId) lit.add(index.rootId);
+  // Relationships the branch genuinely has, in either direction.
+  for (const id of [...members]) {
+    for (const e of index.incident.get(id) ?? []) {
+      lit.add(e.from === id ? e.to : e.from);
+    }
+  }
+  return lit;
 }

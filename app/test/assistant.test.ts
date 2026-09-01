@@ -250,7 +250,14 @@ test('an assistant answer cites only objects the principal can actually see', as
         proposedTasks: [],
       };
     },
-    describe: () => ({ kind: 'fake' as const, model: 'liar' }),
+    describe: () => ({
+      kind: 'fake' as const,
+      model: 'liar',
+      tier: null,
+      defaultEffort: null,
+      models: [],
+      efforts: [],
+    }),
   };
 
   const bob = await runAsk(
@@ -300,7 +307,14 @@ test('a malformed or unavailable model response is reported, not rendered', asyn
     async complete() {
       throw new Error('model returned malformed JSON');
     },
-    describe: () => ({ kind: 'fake' as const, model: 'broken' }),
+    describe: () => ({
+      kind: 'fake' as const,
+      model: 'broken',
+      tier: null,
+      defaultEffort: null,
+      models: [],
+      efforts: [],
+    }),
   };
   const result = await runAsk(
     { context: clientFor(), llm: broken },
@@ -366,7 +380,14 @@ test('a proposal citing an invented source loses the attribution, not just the t
         ],
       };
     },
-    describe: () => ({ kind: 'fake' as const, model: 'inventive' }),
+    describe: () => ({
+      kind: 'fake' as const,
+      model: 'inventive',
+      tier: null,
+      defaultEffort: null,
+      models: [],
+      efforts: [],
+    }),
   };
   const result = await runAsk(
     { context: clientFor(), llm: inventive },

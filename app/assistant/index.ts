@@ -90,10 +90,15 @@ export function createAssistantApp(
           return send(res, 401, { ok: false, stage: 'context', reason: 'not_authenticated', detail: 'Sign in first.' }, origin);
         }
         const body = await readJson(req);
+        // The requested model / effort are passed through UNVALIDATED here and
+        // validated by the pipeline against what the provider can actually run.
+        // One validation point, so no route can bypass it (T3.3-CORRECTION).
         const outcome: AskOutcome = await runAsk(deps, {
           question: typeof body['question'] === 'string' ? body['question'] : '',
           userCredential,
           targetId: typeof body['targetId'] === 'string' ? body['targetId'] : null,
+          model: body['model'],
+          effort: body['effort'],
         });
         return send(res, outcome.ok ? 200 : 502, outcome, origin);
       } catch (err) {

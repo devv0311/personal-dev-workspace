@@ -560,3 +560,176 @@ remains. No legitimate test was deleted.
 - Email stays a preview surface until a mailbox integration is authorized.
 - Workflow-run history will populate the CI row if GitHub Actions is ever
   configured for this repository; today it truthfully reports zero runs.
+
+---
+
+## T3.3-CORRECTION — Command Centre Architecture, Identity, Attention, Mail
+
+**Status:** IMPLEMENTED — awaiting review. Not self-accepted.
+**Branch:** `feature/t3.3-correction-pass` (cut from `main` at `cc3c1b0`).
+**Date:** 2026-09-01.
+
+A correction pass over T3.3, not a redesign. The near-black canvas, the single
+restrained orange accent, the hairline structure, the information density, the
+central visualisation, the quiet rails, the particle atmosphere and the
+reference-derived composition are all unchanged. What changed is the
+*architecture* underneath four surfaces, plus the identity model they all read.
+
+### Identity — Dev is the workspace head
+
+Headship was not a fact the model held, so the shell had nowhere truthful to
+read it from and a member appeared as the owner. It is a fact now:
+
+- `workspace_membership.role` admits `owner | member` (migration `002`), with a
+  **partial unique index** so a workspace cannot have two heads.
+- `MemberRepository.readWorkspace()` returns the workspace and the member whose
+  membership carries `owner`. No head recorded ⇒ `null`, never a guess.
+- `/api/me` reports **two different identities** and never conflates them:
+  `displayName`/`role` (whoever this credential is) and `workspace.head`
+  (whoever heads the workspace). The header states both, and collapses to one
+  line — `YOU Dev · WORKSPACE HEAD` — only when they are the same person.
+- The seed makes **Dev** the head, the owner of the seeded objects, and the
+  bootstrap principal. Ownership is re-asserted on conflict so a database
+  seeded before this pass converges; `created_by` is deliberately not rewritten
+  (authorship is immutable, R8).
+- Headship grants **nothing**: the head sees what the VisibilityPolicy says, and
+  no mailbox but their own. Both are asserted by tests.
+- The other group members remain real members. `Alice`/`Bob` remain **only** as
+  the two-party authorization fixture in `test/helpers.ts`; the seed additionally
+  retires those two superseded subjects from an older database, guarded across
+  every table that references a principal so no real row is ever destroyed.
+
+### Mode A — the command view's artifact orbit
+
+The six static capability circles (CAPTURE / SEARCH / CONNECT / ASK / EXTRACT
+TASKS / SUMMARIZE) are **removed** — from the geometry and from the model.
+Nothing in `command-ring.js` knows what a capability is any more; they are not
+hidden, not disabled, and not retained as invisible semantic nodes.
+
+The perimeter now carries **artifacts**: real outputs, assembled server-side by
+`application/artifacts.ts` from records that already existed — delivered outbox
+runs (named by the consumer genuinely registered for the event), CI runs, pull
+requests, issues, and objects a user kept from an assistant proposal. Each node
+carries a stable id, a real title, a category, a real instant, its source, the
+internal object or external URL behind it, and a **per-principal** read state
+(`artifact_read`). Hover states the timestamp; activation opens a detail modal
+that offers `Open source` only when a URL exists and `Open in Second Brain` only
+when a real object does. An empty feed renders an empty orbit that says so.
+The core still carries DEVWORKSPACE's identity and its real object/project count.
+
+### Mode B — the radial sector tree
+
+The concentric ring-per-data-type map (CAPABILITIES / INBOX / PROJECTS /
+CONTEXT) is **gone**, not renamed. The Second Brain is now a tree whose geometry
+carries the hierarchy: a workspace hub, ring 1 of the four real executable
+skills, ring 2 of one **angular sector per real project**, and ring 3 of that
+project's own context fanning outward **along its own ray**. Sector dividers,
+hub→project trunks and project→context branches are drawn, and each sector is
+labelled with its real project name and real context count. Objects with no home
+project get a real `unfiled` sector rather than a data-type ring — with no
+project node, because there is no project object.
+
+**Sector Focus** lights one branch — the project, its context and whatever
+either is genuinely related to by a real edge — and dims every other branch,
+its structure and its label to **0.15**. It works from hover, from selection and
+from keyboard focus, it is emphasis rather than filtering (no node leaves the
+graph), and nothing outside the map is dimmed.
+
+### The Attention Stack
+
+`EMAIL — NOT CONNECTED` is replaced by one triage surface fed by many sources:
+open pull requests, CI runs that did not succeed, open issues, and e-mail from
+accounts the current user connected. Each source states its own condition —
+`connected` / `not configured` / `not connected` / `unavailable` — and an
+unreadable source contributes nothing and says why. A category pill prints a
+count only when every contributing source proved it exact. A merged PR and a
+green CI run are not in the queue.
+
+### Per-user mail
+
+Mail is personal, and the ownership model is enforced in the schema, the
+repository and the use cases: `mail_account.principal_id` is the owner, every
+statement filters by it, and there is no unscoped overload. One user cannot
+list, read, change or disconnect another's account, and **workspace headship
+grants no access to any mailbox**.
+
+- Provider-agnostic: one OAuth 2.0 + PKCE implementation behind `MailProvider`,
+  with Google/Gmail and Microsoft/Outlook profiles. Adding a provider is a
+  profile plus config.
+- The user authenticates **at the provider**. There is no password field on this
+  surface and nowhere for one to go.
+- Credentials are sealed with AES-256-GCM (`MAIL_TOKEN_KEY`) before storage, in
+  a separate table an ordinary account read never touches, and appear in no
+  response. There is **no default key**: with none configured, connecting is
+  refused with the reason rather than done insecurely.
+- Multiple accounts per user, per-account "feeds the queue", disconnect (which
+  destroys the grant) and reconnect. An inbound mail item keeps the address that
+  produced it, and nothing else about the message is exposed.
+
+### Skills Deck — model / effort
+
+Each assistant-backed card carries a configuration control showing the
+configuration that will actually execute. The matrix offers HAIKU/SONNET/OPUS/
+FABLE and LOW/MEDIUM/HIGH/XHIGH, and disables every option the configured
+runtime does not report as supported. The runtime declares its own capabilities;
+the pipeline **refuses** an unsupported model or effort before it fetches
+context or calls a model; and the result echoes what actually ran. The
+deterministic development stub declares empty lists — it is not a model — so
+while it is what answers, every option is unavailable and the deck says so. The
+Anthropic adapter genuinely sends the tier's model id and translates effort into
+an extended-thinking budget with a matching output ceiling.
+
+### Preserved
+
+GitHub remains the source for external repository activity only; DEVWORKSPACE
+remains authoritative for notes, tasks, decisions, captured context,
+relationships and AI-generated context, joined through
+`object.attributes.externalRef`. Live routine telemetry is unchanged and is now
+read **once** and shared with the artifact feed, so the orbit and the Routines
+rail cannot disagree. `Asia/Kolkata` remains explicit on every formatter.
+Cross-surface object identity is intact: an artifact, a routine run, a search
+hit, a rail row and an inspector row all reveal the same object through the one
+`goTo` path.
+
+### Data-honesty audit
+
+Swept for `Alice`, `Bob`, `Sanchit`, `Shourya`, `fake`, `mock`, `demo`,
+`placeholder`, `deterministic`, `Sydney`, `AEST`, `NOT CONNECTED`. Every
+surviving hit is one of: a comment recording what was removed; the
+`RETIRED_SUBJECTS` list that removes it; real group members; `Not connected` as
+a genuine source **state**; `providerName('fake' → 'dev stub')`; "deterministic"
+describing pure layout/ordering functions; an HTML `placeholder` attribute; or a
+test fixture. Style rules whose markup no longer exists (the e-mail hero count,
+message list, mix bar, capability badges, ring-per-type annotations) were
+deleted rather than left dead.
+
+### Verification
+
+- `npm run typecheck` — clean.
+- `npm test` — **169 / 169 pass** against real PostgreSQL (127 pre-existing and
+  unchanged in intent, plus identity 6, mail 13, artifacts 7, inbound 7,
+  skill-config 9; the Second Brain's own 40 pure-model tests were rewritten for
+  the sector tree).
+- Migrations applied from empty, seeded, and driven through the browser with the
+  core, the worker and the assistant running.
+- Verified in the browser at 2048×1400, 1140×860 and 390×844: no six capability
+  circles (`0` matches for `.cr-badge`/`[data-cap]`), 14 real artifacts on the
+  orbit, the artifact modal on real GitHub fields, sector focus measured at
+  exactly `opacity: 0.15` on unrelated branches, the configuration matrix, a
+  failed run reported as `failed · model provider returned 401`, and the mail
+  settings surface with both providers offered as unavailable **with reasons**.
+- Authorization re-verified through the UI as three different principals: the
+  head (4 projects, 10 routine artifacts), a sharee (1 project, 3 routine
+  artifacts) and a member with no shares (0 projects, 1 node, 0 artifacts).
+  Per-person read state confirmed: an artifact read by the head stayed unread
+  for another member.
+- Evidence: `app/docs/screenshots/t3.3-correction/` (8 captures).
+
+### Open
+
+- No mail provider is configured in this environment, so the connect flow is
+  exercised end to end by tests against a stub provider rather than against a
+  live consent screen. The runtime path reports both providers as unavailable
+  with their reasons, which is the honest state.
+- The repository currently has no failing CI run, no open PR and no open issue,
+  so the Attention Stack is genuinely clear rather than populated.
